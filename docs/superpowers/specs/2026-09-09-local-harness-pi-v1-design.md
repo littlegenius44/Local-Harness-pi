@@ -4,7 +4,7 @@
 
 架构状态：已由项目所有者确认
 
-文档状态：待最终审阅
+文档状态：已确认
 
 目标版本：V1
 
@@ -245,6 +245,8 @@ Pi 的 `beforeToolCall`/`afterToolCall` 只用于桥接，不再实现一套权�
 Pi 内核只看见 DSH 组装后的 prompt 和工具快照。因此本地 Skills、MCP tools、Goal/Plan 不需要 Pi 专用适配器，也不会形成第二份状态。
 
 V1 插件能力限定为加载用户自己的兼容 Skills/MCP 配置。不得承诺可直接分发 OpenAI curated 插件。
+
+V1 的权限页面只展示并编辑 DSH 实际执行的 workspace、command、network、approval 和 MCP 设置。已安装的 DSH 可执行插件包属于受信任源码；V1 不增加一个只声明但无法由运行时完整执行的便携权限 manifest。跨来源 manifest、细粒度 grant、签名和信任链进入 V1.1。
 
 ## 14. 前端设计边界
 

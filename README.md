@@ -6,7 +6,7 @@
 
 > **DSH 产品平台 + Pi 执行内核 + 单一 DSH 会话事实源。**
 
-当前仓库只包含已确认的 V1 设计与契约，不包含实现代码。后续代码执行者应先阅读下列文档，并按文档中的来源基线重新核对上游源码后再编写实施计划。
+当前仓库只包含已确认的 V1 设计、契约和可执行实施计划，不包含实现代码。后续代码执行者应先阅读下列文档，并按文档中的来源基线重新核对上游源码后再执行计划。
 
 ## 文档入口
 
@@ -15,12 +15,20 @@
 - [接口契约](docs/architecture/interface-contracts.md)
 - [会话一致性与恢复](docs/architecture/session-consistency.md)
 
+## 实施计划
+
+- [V1 主计划与三个 Draft PR 检查点](docs/superpowers/plans/2026-09-10-local-harness-pi-v1-master.md)
+- [PR-A：DSH 源码基线、桌面品牌与安全边界](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-a-dsh-baseline.md)
+- [PR-B：Pi Agent Core 内核桥与单一会话事实源](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-b-pi-kernel.md)
+- [PR-C：OpenAI-compatible 配置与 V1 桌面产品闭环](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-c-product-loop.md)
+
 ## 当前状态
 
 - 架构方向：已确认
 - V1/V1.1 范围：已确认
-- 需求与接口文档：待项目所有者审阅
-- 实施计划与代码：尚未开始
+- 需求与接口文档：已确认
+- 实施计划：已完成
+- 实现代码：尚未开始
 
 ## 上游来源基线
 

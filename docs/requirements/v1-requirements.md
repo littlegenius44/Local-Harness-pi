@@ -1,6 +1,6 @@
 # Local-Harness-pi V1 需求规格
 
-文档版本：1.0-draft
+文档版本：1.0
 
 适用版本：V1
 
@@ -275,7 +275,7 @@ MCP tools 必须注册到 DSH Tool Registry 后再由 ToolBridge 暴露给 Pi。
 
 ### FR-065（P1）插件权限声明
 
-插件可以声明文件、命令、网络和 MCP 权限；缺失声明时采用最小权限。V1 至少做到展示和基础拒绝，细粒度签名/信任链进入 V1.1。
+V1 必须展示 DSH settings/composition 已声明并实际执行的文件、命令、网络和 MCP 有效权限；基础拒绝继续由 DSH workspace、network、approval 和 `tools/pre-execute` 策略执行。V1 将已安装的 DSH 可执行插件包视为受信任源码，不新增一个无法完整执行的便携 manifest 权限字段。跨来源插件 manifest、细粒度 grant、签名和信任链进入 V1.1。
 
 ## 12. 附件、PDF 和浏览器
 
