@@ -1,6 +1,6 @@
 # Local-Harness-pi V1 需求规格
 
-文档版本：1.0
+文档版本：1.1
 
 适用版本：V1
 
@@ -15,6 +15,8 @@
 - **P0**：缺失则不能发布。
 - **P1**：V1 应包含；若延期必须由项目所有者确认。
 - **P2**：明确进入 V1.1 或以后。
+
+本交接计划没有批准任何 P1 延期：FR-025、FR-047、FR-052、FR-064、FR-065、FR-071、FR-072、FR-083、NFR-020、NFR-030、NFR-031 和 NFR-032 均纳入 V1 实施与验收。执行者不得自行把它们移出 V1；若项目所有者以后调整范围，必须先更新需求、追踪矩阵和对应 PR 计划。
 
 需求 ID 是稳定引用。重写需求时保留 ID；删除需求时标记废弃，不复用编号。
 
@@ -55,6 +57,7 @@ V1 的正式发布和验收目标是 Windows 11 x64。Windows 10 22H2 可以兼�
 验收：
 
 - 安装包可在干净 Windows 11 x64 用户环境安装、启动和卸载。
+- V1 Alpha 为未签名 NSIS 手工安装包，发布页必须明示 SmartScreen 警告和 SHA-256；代码签名、自动安装与回滚属于 FR-092/V1.1。
 - 应用数据写入 Electron `userData` 下的应用专用目录。
 - 项目文件只在用户选定工作区内修改。
 
@@ -86,9 +89,17 @@ Node/Electron/pnpm 版本必须继承固定 DSH 基线；Pi Agent Core 与 Pi AI
 
 renderer 必须保持 `nodeIntegration=false`、`contextIsolation=true`、`sandbox=true` 和 `webSecurity=true`。预加载层只暴露经过 schema 验证的最小 API。
 
-### FR-004（P1）产品标识
+### FR-004（P0）产品标识、关于与许可
 
-窗口标题、安装包名、应用数据目录、关于页面和日志前缀应统一为 `Local-Harness-pi`，同时在许可证页面展示 DSH/Pi 来源。
+窗口标题、PWA 名称、侧栏/空会话品牌、安装包名、应用数据目录、About 和发布产物名必须统一为 `Local-Harness-pi`，应用 ID 固定为 `io.localharness.pi`。Windows 桌面 Help 菜单必须提供 About 入口，显示应用版本、固定 DSH commit、Pi package 版本以及“非 OpenAI/DeepSeek 官方产品”声明；同一入口必须能打开随安装包分发的第三方许可文件。桌面与 Web 不得继续使用 DSH 官方 wordmark、鱼形标志或 favicon 作为本产品标志；V1 使用仓库自带的中性 `LHπ` 标志，不引入新的第三方商标资产。
+
+验收：
+
+- `THIRD_PARTY_NOTICES.txt` 至少列出 DSH、Pi 的仓库、固定版本/commit 和 MIT 许可；Codex 只标记为 Apache-2.0 设计参考，不得暗示分发了 Codex 源码。
+- About 与许可入口离线可用，不依赖 GitHub 可达。
+- 打包测试必须证明许可文件进入 Windows unpacked artifact；窗口/PWA/侧栏/空会话/首次欢迎页不得把 `DeepSeek Harness` 显示为当前产品名。
+- `DeepSeek Harness` 只允许出现在真实上游归属语境（About、第三方许可、`UPSTREAM.md`、源码/开发者文档）和内部兼容标识中。`@deepseek-ai/dsh-*` 包名、Cordis plugin id、`dsh-app` scheme、`window.dshDesktop`、`DSH_*` 环境变量、Session/remote event type 与 CLI 可执行名 `dsh` 不做机械改名。
+- 桌面所用 Web profile 必须关闭 DSH 默认模型身份句，并注入 `Local-Harness-pi` 身份；面向模型的 Web GUI 上下文不得把当前产品称为 DeepSeek Harness，但可准确说明它 built on DeepSeek Harness。
 
 ## 6. 会话与消息
 
@@ -128,15 +139,33 @@ Host 只有在该 Inbox splice 通过 Session durability barrier 后才向 Clien
 
 ### FR-016（P0）会话列表和搜索
 
-列表的身份、标题、工作区和可用性来自 DSH Session/Query。全文搜索启用时使用 DSH SQLite FTS；索引缺失或损坏时会话仍可按权威日志打开。
+列表的身份、标题、工作区和可用性来自 DSH Session/Query。标题/元数据搜索必须直接可用；正文全文搜索在用户首次提交非空查询时按需打开 DSH SQLite FTS，不得要求用户编辑配置文件。索引缺失、损坏或重建中时，会话仍可按权威日志打开；UI 必须分别显示“正在建立索引”和“索引失败，可重试”，不得显示“会话丢失”。
 
-### FR-017（P1）会话分叉
+### FR-017（P0）会话整理、分叉与导出
 
-若保留 DSH 现有 fork 能力，子会话必须复制平衡的已完成事件前缀并记录 parentSession；不得复制开放 step、悬空 tool call 或 Pi 运行时对象。
+必须保留 DSH 已有的会话重命名、搜索、归档、取消归档、分叉和导出入口。归档是 V1 唯一默认移除入口，不增加永久删除会话按钮。
+
+验收：
+
+- 重命名和归档状态由 DSH Session/Query 持久化，重启后保持一致。
+- 已归档会话不出现在默认列表，但能从归档筛选中打开并取消归档。
+- 分叉只复制平衡的已完成事件前缀并记录 `parentSession`；不得复制开放 step、悬空 tool call 或 Pi 运行时对象。
+- Header 与 `/export` 必须导出同一 DSH Session generation；完整导出明确提示可能包含 prompt、代码和工具输出。
 
 ### FR-018（P0）单写者
 
 同一 session 同时只能存在一个活动写者。第二个进程或恢复操作必须明确失败，不能进入“最后写入者获胜”。
+
+### FR-019（P0）长会话压缩
+
+长会话压缩必须继续由 DSH Compaction 和 surface replacement 负责。Pi Harness Compaction 禁止进入生产依赖；Pi 每个 step 必须读取最新 DSH surface generation。
+
+验收：
+
+- 自动压力触发、provider 返回上下文溢出后的单次压缩恢复，以及 `/compact` 手工触发均有集成测试。
+- 压缩成功后，下一 step 只使用新 surface，不把旧 Pi transcript 追加回来；原始 durable event 历史仍可审计。
+- 压缩失败不得覆盖旧 surface；确定无法压缩时返回可行动错误，不进入无限重试。
+- 重启后从 DSH compaction/surface event 恢复，不读取 Pi session store。
 
 ## 7. Pi 执行内核
 
@@ -168,11 +197,11 @@ Pi 必须位于 `KernelDriver` 之后。DSH Agent/UI/Session 不得 import Pi �
 
 ### FR-030（P0）本地 OpenAI-compatible route
 
-用户必须可配置 loopback `baseUrl`、wire API、模型 id、上下文窗口、最大输出 token 和推理强度。HTTP 只允许 loopback 地址；远程非 TLS URL 必须拒绝。
+用户必须可配置 loopback `baseUrl`、wire API、模型 id、上下文窗口、最大输出 token 和推理强度。HTTP 只允许 loopback 地址；远程非 TLS URL 必须拒绝。base URL 禁止 userinfo、query 和 fragment，credential 不能藏在 URL 中。
 
 ### FR-031（P0）云端 OpenAI-compatible route
 
-用户必须可配置 HTTPS `baseUrl`、wire API、模型 id 和 credential reference。API key 不得保存在普通设置 JSON、Session、日志或 UI 状态快照中。
+用户必须可配置 HTTPS `baseUrl`、wire API、模型 id 和 credential reference。base URL 禁止 userinfo、query 和 fragment。API key 不得保存在普通设置 JSON、Session、日志或 UI 状态快照中。V1 不开放任意请求 header 编辑；标准 OpenAI Authorization 只能由 Host 从 credential reference 构造。
 
 ### FR-032（P0）显式 wire API
 
@@ -202,6 +231,8 @@ provider、model、reasoning、maxTokens、凭据解析结果和 provider snapsh
 ### FR-037（P0）V1 出站限定
 
 V1 模型连接只实现 OpenAI-compatible 出站调用。Anthropic/Gemini 直接协议和 OpenAI-compatible 入站网关均不得作为 V1 隐含依赖。
+
+V1 模型流固定使用 HTTP SSE；WebSocket transport 不得出现在产品写入路径。模型发现、模型流和 HTTP MCP 必须复用同一个 Host guarded-fetch 实现，对初始 URL、DNS pinning、redirect、credential origin 和资源释放执行一致策略。
 
 ## 9. 工具和权限
 
@@ -277,6 +308,32 @@ MCP tools 必须注册到 DSH Tool Registry 后再由 ToolBridge 暴露给 Pi。
 
 V1 必须展示 DSH settings/composition 已声明并实际执行的文件、命令、网络和 MCP 有效权限；基础拒绝继续由 DSH workspace、network、approval 和 `tools/pre-execute` 策略执行。V1 将已安装的 DSH 可执行插件包视为受信任源码，不新增一个无法完整执行的便携 manifest 权限字段。跨来源插件 manifest、细粒度 grant、签名和信任链进入 V1.1。
 
+### FR-066（P0）MCP 图形化管理
+
+设置页必须允许用户图形化新增、编辑、启用、停用和移除 GUI-managed MCP server，并显示连接阶段、最后错误和工具数。支持 DSH MCP Client 已有的 `stdio` 与 `streamable-http` transport；由固定 composition 提供的 MCP 行只读展示，不允许 UI 覆盖。
+
+GUI-managed server 的字段固定为：稳定记录 id、唯一 `serverName`、transport、`toolCallTimeoutMs`、重连策略，以及：
+
+- `stdio`：`command`、`args[]`、可选 `cwd`、环境变量名到 credential reference 的绑定。
+- `streamable-http`：`url`、HTTP header 名到 credential reference 的绑定；Authorization 的 `Bearer ` 等公开前缀可以单独保存，credential value 不得进入配置。
+
+V1 不提供任意 shell command line 文本框；`command` 与每个 argument 必须作为独立字段传给 DSH stdio transport，不经过 shell 展开。
+
+### FR-067（P0）MCP 配置一致性与生效
+
+GUI-managed MCP 配置必须由 Host 的 `local-harness.mcp` DSH settings namespace 持久化，Client 不得保存副本。启用记录在 DSH Tool Registry 的 deployment-global/root layer 挂载一次，所有 Agent scope 继承同一 tool generation；不得按 session 建立 MCP 配置或连接副本。每次写入必须携带 document revision 并以 compare-and-swap 更新完整 server record；并发修改返回稳定 conflict，不能最后写入者覆盖。
+
+生效规则固定为：
+
+- 新建记录默认 `enabled=false`；所引用 credential 全部可解析后才能启用。
+- 保存成功表示配置已原子提交，不表示外部 server 已连接；运行阶段通过独立状态返回 `applying | active | error | disabled`。
+- 只重建发生变化的 DSH MCP Client fiber；其他 server 和基础工具不得中断。
+- `serverName` 变化会改变模型可见工具名，必须显示警告并要求请求携带 `acknowledgeToolRename=true`。
+- remove 只删除配置并停止该 server，不自动删除 credential reference，因为 reference 可能被其他配置共享。
+- credential 更新后只重启引用它的 server；resolved value 绝不返回 Client、Session、日志或 inventory。
+- composition MCP 与 GUI-managed MCP 的 `serverName` 冲突必须在提交前拒绝。
+- HTTP MCP 只允许 HTTPS，或 hostname 为 `localhost`/loopback IP literal 的 HTTP；URL 禁止 userinfo、query 和 fragment。重定向每跳重新校验，带 credential-bound header 时不得跨 origin 跟随。
+
 ## 12. 附件、PDF 和浏览器
 
 ### FR-070（P0）附件
@@ -310,6 +367,7 @@ Playwright/Computer-use、登录态、下载和页面交互进入 V1.1，不是 
 - Skills：来源、启用状态和错误。
 - MCP：server、transport、连接状态和工具数。
 - Experimental：默认关闭的实验项。
+- About：版本、固定上游来源和离线第三方许可入口。
 
 ### FR-081（P0）Composer “+” 菜单
 
@@ -371,7 +429,7 @@ Playwright/Computer-use、登录态、下载和页面交互进入 V1.1，不是 
 
 ### NFR-011（P0）网络
 
-本地 route 只允许 loopback HTTP；云 route 必须 HTTPS。重定向后的最终 URL 也要重新校验。模型请求不得继承系统代理凭据或任意环境 Authorization。
+本地 route 只允许 loopback HTTP/HTTPS；云 route 必须 HTTPS。重定向后的最终 URL 也要重新校验。带 `location` 的 V1 产品 route 不得继承 Pi catalog 的 OAuth/ambient auth、系统代理凭据或任意环境 Authorization；本地无 credential route 必须真正 keyless，云 route 只能使用显式 DSH credential reference。
 
 ### NFR-012（P0）Electron
 
@@ -456,10 +514,12 @@ UI 必须区分：等待模型、流式生成、等待审批、执行工具、�
 - 完整 frame checksum corruption。
 - SQLite 文件丢失或损坏。
 - 同 session 第二写者竞争。
+- 自动/手工 compaction 后终止并恢复。
+- context overflow 触发一次 DSH compaction 后成功重试；压缩失败不循环。
 
 ### TEST-005（P0）产品能力矩阵
 
-Goal、Plan、Skill、MCP、附件、PDF 预览、模型切换、设置与“+”菜单必须各有至少一个集成或桌面 E2E 用例。
+Goal、Plan、Skill、MCP、附件、PDF 预览、模型切换、设置与“+”菜单必须各有至少一个集成或桌面 E2E 用例。另必须覆盖首次模型配置、会话重命名/搜索/归档/恢复/分叉/导出、Diff、Terminal、About/许可，以及 MCP stdio/HTTP 的新增、启停、编辑、冲突、失败隔离和移除。
 
 ### TEST-006（P0）安全矩阵
 
@@ -491,13 +551,29 @@ Goal、Plan、Skill、MCP、附件、PDF 预览、模型切换、设置与“+�
 
 在高延迟流式输出、工具调用和快速切换会话场景下，每个 durable messageId 只显示一次；旧 session 的迟到 transient frame 被丢弃。
 
+### AC-007 首次启动与模型回退
+
+干净 profile 首次启动必须打开 Models onboarding 且禁用 Send。配置无 key 的 loopback route 后可以发送；云 route 缺少 credential 时保持不可用。模型发现失败时保留用户手工填写的 model id，修正连接后无需重建会话即可使用。
+
+### AC-008 会话资料库闭环
+
+用户可以重命名会话、按正文搜索、归档并从归档视图恢复、从已完成 turn 分叉、导出当前 generation；每次操作后重启应用，列表与打开结果保持一致。
+
+### AC-009 MCP 管理闭环
+
+用户新增一个默认停用的 stdio server，配置 credential reference 后启用并调用工具；再新增一个 HTTP server。一个 server 连接失败时另一个及基础工具仍可用。编辑产生 revision conflict 时保留本地草稿并要求刷新；移除后对应工具消失、历史 tool event 仍可显示。
+
+### AC-010 长会话闭环
+
+使用小 context-window mock route 推进到自动压缩阈值，并分别测试 `/compact` 与 provider context-overflow 路径。压缩后继续一次包含工具调用的 turn，重启后模型 surface、完整审计历史和 UI projection 均一致。
+
 ## 21. Definition of Done
 
 V1 只有同时满足以下条件才完成：
 
 - 所有 P0 需求通过，P1 延期均有项目所有者明确记录。
 - TEST-001 至 TEST-006 有可重复命令和结果。
-- AC-001 至 AC-006 有证据。
+- AC-001 至 AC-010 有证据。
 - 没有 Pi durable session、第二个 chat DB 或前端持久 transcript。
 - Windows 11 安装包经过干净环境 smoke test。
 - 许可证、来源、设置迁移、会话格式与已知限制文档齐全。
@@ -521,7 +597,7 @@ V1.1 候选需求固定为：
 | 需求范围 | 主要 PR |
 |---|---|
 | PLAT、FR-001–004、基础 NFR-010–014 | PR-A |
-| FR-010–046、NFR-001–006、TEST-001–004 | PR-B |
-| FR-050–092、NFR-020–032、TEST-005–006、AC 全部 | PR-C |
+| FR-010–019、FR-020–025、FR-030–037、FR-040–047、NFR-001–006、TEST-001–004、AC-010 | PR-B |
+| FR-050–052、FR-060–067、FR-070–074、FR-080–083、FR-090–092、NFR-020–032、TEST-005–006、AC-001–009 | PR-C |
 
 PR-C 必须建立在 PR-B 的恢复和契约测试通过之后；UI 不得通过 mock 永久绕过真实 Pi/DSH 桥接。

@@ -14,7 +14,7 @@
 
 开工前完整阅读：
 
-- DSH：`packages/core/agent/src/index.ts`、`runtime-types.ts`；`packages/core/agent-loop/src/index.ts`、`agent.ts`、`inbox.ts`、`assistant-stream.ts`、`runtime-context.ts`、`tool-calls.ts`、全部 tests；`packages/core/tools/src/index.ts`；`packages/session/session-persistence/src/handle.ts`；JSONL persistence、projection 和 interrupted-turn repair；`packages/llm/llm-pi-ai/src/adapter.ts`、`context.ts`、`stream.ts`；`packages/api/session-controller/src/commands.ts`。
+- DSH：`docs/cookbook/adding-a-package.md`；`packages/core/agent/src/index.ts`、`runtime-types.ts`；`packages/core/agent-loop/src/index.ts`、`agent.ts`、`inbox.ts`、`assistant-stream.ts`、`runtime-context.ts`、`tool-calls.ts`、全部 tests；`packages/core/tools/src/index.ts`；`packages/session/session-persistence/src/handle.ts`；JSONL persistence、projection 和 interrupted-turn repair；`packages/llm/llm-pi-ai/src/adapter.ts`、`context.ts`、`stream.ts`；`packages/api/session-controller/src/commands.ts`；`packages/compaction/compaction-basic/src/index.ts`、`tests/compaction-loop-repro.spec.ts`；`packages/compaction/command-compact/src/index.ts`、`tests/command-compact.spec.ts`。
 - Pi：`packages/agent/src/agent.ts`、`agent-loop.ts`、`types.ts`、对应 tests；`packages/ai/src/utils/event-stream.ts` 和 OpenAI Responses/Completions event implementations。
 - Codex：只复核审批/工具调用和会话完成的安全边界，不复制运行时代码。
 
@@ -33,6 +33,8 @@
 - Modify: `package.json`
 - Modify: `pnpm-workspace.yaml`
 - Modify: `pnpm-lock.yaml`
+- Modify: `tsconfig.base.json`
+- Modify: `tsconfig.host.json`
 
 - [ ] 从已合入的 PR-A 主线创建分支。
 
@@ -57,7 +59,7 @@
   ```json
   {
     "name": "@local-harness/pi-agent-loop",
-    "version": "0.1.0",
+    "version": "0.1.5-alpha.2",
     "private": true,
     "type": "module",
     "main": "lib/index.js",
@@ -70,6 +72,8 @@
   ```
 
   保留 DSH 包中的 `@deepseek-ai/dsh-brand`、`dsh-util-values`、Schemastery、Zod 依赖。不得加入 Pi CLI、coding-agent 或 harness 子路径。
+
+- [ ] 按 DSH `docs/cookbook/adding-a-package.md` 注册项目：`tsconfig.base.json` 增加 `@local-harness/pi-agent-loop` 精确 source alias，`tsconfig.host.json` 增加 `packages/core/agent-loop-pi` project reference；禁止加入 Client aggregate。README 按 core Agent Loop 模板记录 Pi 边界、直接模型上下文与已知限制，运行 `pnpm run doc-sync` 并提交配对文件。
 
 - [ ] 在 `pnpm-workspace.yaml` 的 `minimumReleaseAgeExclude` 增加精确 `@earendil-works/pi-agent-core@0.85.1`；运行 `pnpm install` 更新 lockfile。
 
@@ -101,7 +105,7 @@
   Run:
 
   ```powershell
-  git add packages/core/agent-loop-pi scripts/verify-pi-kernel-boundary.ts scripts/tests/verify-pi-kernel-boundary.spec.ts package.json pnpm-workspace.yaml pnpm-lock.yaml
+  git add packages/core/agent-loop-pi scripts/verify-pi-kernel-boundary.ts scripts/tests/verify-pi-kernel-boundary.spec.ts package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json tsconfig.host.json
   git commit -m "build: add the pinned Pi kernel package"
   ```
 
@@ -178,7 +182,7 @@
 
 - [ ] 先写 round-trip fixtures：Unicode、空文本、reasoning、多图片引用、嵌套 tool arguments、并行 tool calls、error tool result。断言 block 顺序、messageId、callId、provider/model/usage 不丢失。
 
-- [ ] 先写 step preparation 测试：每次都从 DSH Session surface 重新投影；DSH `agent/pre-step` reject 时没有 `step/start` 和模型调用；设置变化只影响下一 step。
+- [ ] 先写 step preparation 测试：每次都从 DSH Session surface 重新投影；DSH `agent/pre-step` reject 时没有 `step/start` 和模型调用；设置变化只影响下一 step。再构造 generation 1 原始 surface 与 generation 2 compaction surface，断言第二次 `prepare()` 的 Pi messages 只来自 generation 2，既不引用第一次返回数组，也不包含被 shadow 的原始节点。
 
 - [ ] 运行失败测试。
 
@@ -221,7 +225,7 @@
 
   Run: `pnpm vitest run packages/core/agent-loop-pi/tests/model-bridge.spec.ts packages/core/agent-loop-pi/tests/stream-conversion.spec.ts`
 
-- [ ] `DshModelStreamBridge.resolve()` 只通过 DSH model selection 和 LLM catalog 返回 `FrozenModelSelection`。`stream()` 固定调用 `agent/request`、`llm.prepareCall()` 和 DSH retry path，不直接读取 settings 文件或 credential store。
+- [ ] `DshModelStreamBridge.resolve()` 只通过 DSH model selection 和 LLM catalog 返回 `FrozenModelSelection`。`stream()` 固定调用 `agent/request`、`llm.prepareCall()` 和固定 DSH Agent Loop 的 `agent/request-error` waterfall/retry path，不直接读取 settings 文件或 credential store。`MODEL_CONTEXT_WINDOW_EXCEEDED` 只有在 DSH compaction listener 成功发布新 surface 时重做当前 step；普通 transport retry 与 compaction retry 使用 DSH 原有独立预算，Pi driver 不增加第三个计数器。
 
 - [ ] 使用 `createAssistantMessageEventStream()` 构建 Pi stream。转换 producer 必须捕获所有错误并推入 terminal `error` event；不得让 `StreamFn` reject：
 
@@ -487,6 +491,7 @@
 - Create: `packages/core/agent-loop-pi/tests/pi-loop.integration.spec.ts`
 - Create: `packages/core/agent-loop-pi/tests/crash-recovery.e2e.ts`
 - Create: `packages/core/agent-loop-pi/tests/contract-matrix.spec.ts`
+- Create: `packages/core/agent-loop-pi/tests/compaction-through-pi.integration.spec.ts`
 - Create: `.agents/notes/architecture/2026-09-10-pi-kernel-session-ownership.md`
 - Modify: `packages/core/agent-loop-pi/README.md`
 - Modify: `packages/core/agent-loop-pi/README.zh.md`
@@ -497,6 +502,16 @@
 
 - [ ] crash harness 用子进程和明确 barrier marker 终止进程；父进程恢复后断言：确认过的消息存在、未确认消息可以不存在、started-without-result 工具为 unknown、无副作用自动重放、turn/step 平衡。
 
+- [ ] 新增 Pi compaction 集成矩阵，使用固定 DSH `compaction-loop-repro.spec.ts` 的小 context-window 思路，但 AgentFactory 换为 Pi：
+
+  1. `pressure`: 多个含 tool result 的 step 越过阈值，断言 `compaction/start -> summary -> end` 位于前一 `step/end` 与下一 `step/start` 之间。
+  2. `context-overflow`: mock 第一次返回 `MODEL_CONTEXT_WINDOW_EXCEEDED`，DSH 只压缩一次，同一 step 用新 surface 重试成功；断言 transport retry budget 未被消费。
+  3. `manual`: 经 DSH Commands 执行 `/compact`，断言 command 产生的 generation 被下一 Pi step 使用。
+  4. `failure`: summarizer 失败或新 surface 仍超限时旧 generation 保持有效，run 以稳定错误结束；记录调用次数并断言没有循环。
+  5. `restart`: compaction/end flush 后强制终止，恢复的首个 step 从 DSH surface 投影；仓库中未创建 Pi session/compaction 文件。
+
+  每个用例必须断言 DSH durable events、surface generation 和模型实际收到的 message ids，不能只检查 UI 文本或 Pi 内存状态。
+
 - [ ] Agent Note 记录 Pi 事件与 DSH turn/step 映射、三个 flush barrier、tool result 重排、为何 Pi follow-up queue 不承载 DSH next-turn。
 
 - [ ] 运行完整 PR-B 门禁。
@@ -505,7 +520,7 @@
 
   ```powershell
   pnpm run check:local-harness
-  pnpm vitest run packages/core/agent-loop-pi/tests packages/api/session-controller/tests/commands-durability.host.spec.ts
+  pnpm vitest run packages/core/agent-loop-pi/tests packages/api/session-controller/tests/commands-durability.host.spec.ts packages/compaction/command-compact/tests/command-compact.spec.ts
   pnpm run test:snapshot
   pnpm run typecheck
   pnpm run lint
@@ -535,3 +550,10 @@
 - B2：Task B5–B10，提交工具/Session/AgentFactory 并切换默认组合。
 
 B1 的 public type 仍只在私有 package 内；B1 不得让半成品包进入 base composition。B2 必须基于 B1，不允许平行修改同一 bridge 文件。
+
+## PR-B 工期与交接门禁
+
+- 预计净工作量：8–11 个工作日，约 1.3–2.0 个 GPT-5.6 Sol Plus 完整周额度。
+- 推荐节奏：B1–B3 为 2–3 日，B4–B6 为 2–3 日，B7–B9 为 2–3 日，B10/修复为 2 日；不得同时让两个 agent 编辑状态机或 SessionCommitPort。
+- Day 3 检查 KernelDriver/message conversion；Day 6 检查模型/工具/flush；Day 9 检查唯一 AgentFactory、恢复和 compaction；第 10–11 日仅作失败修复与复审。
+- PR-B 不得带入产品 UI。可结束条件是全部 contract matrix、crash recovery、Pi compaction matrix 和 dependency boundary 通过，Draft PR 描述附真实命令输出。

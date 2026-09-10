@@ -1,6 +1,6 @@
 # Local-Harness-pi 会话一致性与恢复规范
 
-文档版本：1.0
+文档版本：1.1
 
 适用版本：V1
 
@@ -53,7 +53,7 @@
 实际路径必须从 Electron `app.getPath('userData')` 和 DSH path service 推导，不能依赖进程 cwd。逻辑布局：
 
 ```text
-<userData>/
+<userData>/harness/         Electron 为 Host 设置的 DSH_HOME
   sessions/                DSH JSONL/Zstd generations
   session-search.db        DSH SQLite 派生索引
   attachments/             DSH 附件内容
@@ -307,6 +307,8 @@ Pi 可以并行执行工具，但 Session 事件保持模型源顺序：
 
 SQLite FTS 只保存从 DSH persisted/live Session 观察得到的搜索文档和 generation/cursor 状态。
 
+桌面 V1 的正文索引采用 `first-search` 打开策略：启动和普通会话列表不强制打开 SQLite；用户首次提交非空正文查询时，Host 打开或创建索引并开始 reconciliation。产品必须在 `packages/bundle/web-app/cordis.patch.yml` 的 `session-query-sqlite` 覆盖中精确设置 `path: !!js dshHomePath('session-search.db')` 与 `openAt: first-search`；保留 base bundle 的 `openAt: never`，不改变非 Web/desktop profile 的默认行为。该策略不得由 Client localStorage 决定。
+
 要求：
 
 - 使用独立数据库路径。
@@ -359,6 +361,8 @@ SQLite FTS 只保存从 DSH persisted/live Session 观察得到的搜索文档�
 
 Compaction 仍由 DSH 负责。其结果通过 DSH Session event 和 surface generation 表达。
 
+允许且必须测试的触发只有三类：DSH 自动上下文压力策略、provider 明确返回 context-window exceeded 后的 DSH request-error 恢复路径、用户 `/compact` 命令。一个 provider 失败最多触发一次压缩后重试；新 surface 仍超限或压缩失败时结束当前 run 并显示稳定错误，不得循环压缩。
+
 Pi 必须：
 
 - 在每个 step 前读取当前 surface。
@@ -371,6 +375,8 @@ Client 必须：
 - durable 历史仍按 event log 可审计。
 - 当前模型上下文和简化 UI 按 surface projection 展示。
 - generation 变化时清理旧 transient frame。
+
+Compaction 提交必须先完整写入新的 DSH surface generation，再使下一 step 可见。失败或进程中断保留旧 generation 为当前有效 surface；恢复只能从完整 DSH compaction/surface event 判定当前 generation。原始 event log 不因压缩被删除、覆盖或改写。
 
 ## 17. Goal、Plan、Skill 与 MCP 的会话关系
 
@@ -453,6 +459,8 @@ V1 不实现云同步。将用户数据同步到云端必须另立威胁模型�
 8. tool/result 后、step/end 前。
 9. step/end 后、turn/end 前。
 10. close/flush 期间。
+11. automatic compaction 新 generation 提交前与提交后。
+12. provider context overflow 触发 compaction 后、重试请求前。
 
 ### 22.2 并发测试
 
@@ -477,6 +485,8 @@ V1 不实现云同步。将用户数据同步到云端必须另立威胁模型�
 - transient 和 durable assistant 同时显示为两条消息。
 - Session append 失败后工具仍继续执行。
 - 完整 checksum corruption 被静默截断。
+- Pi Harness Compaction 被加载，或 DSH compaction 后 Pi 继续拼接旧 transcript。
+- context overflow 在同一 run 中形成无限 compaction/retry 循环。
 
 ## 24. 运维诊断
 

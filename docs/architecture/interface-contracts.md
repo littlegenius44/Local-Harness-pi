@@ -1,6 +1,6 @@
 # Local-Harness-pi V1 接口契约
 
-文档版本：1.0
+文档版本：1.1
 
 契约版本：`1`
 
@@ -57,7 +57,7 @@ export interface TurnPosition {
 }
 
 export interface StableFailure {
-  readonly domain: 'MODEL' | 'TOOL' | 'SESSION' | 'KERNEL' | 'PROTOCOL' | 'SECURITY'
+  readonly domain: 'MODEL' | 'TOOL' | 'SESSION' | 'KERNEL' | 'PROTOCOL' | 'SECURITY' | 'MCP'
   readonly code: string
   readonly message: string
   readonly retryable: boolean
@@ -420,7 +420,6 @@ export interface OpenAiCompatibleRoute {
   readonly baseUrl: string
   readonly wireApi: 'openai-responses' | 'openai-completions'
   readonly credentialRef?: string
-  readonly headers?: Readonly<Record<string, string>>
   readonly models: readonly OpenAiCompatibleModel[]
   readonly timeoutMs?: number
   readonly streamIdleTimeoutMs?: number
@@ -444,12 +443,45 @@ export interface OpenAiCompatibleModel {
 验证：
 
 - `id` 非空且在 routes 内唯一。
-- `location=local` 时 HTTP 只允许 `127.0.0.0/8`、`::1` 或解析后仅为 loopback 的 `localhost`；禁止 URL userinfo。
+- 所有 `baseUrl` 都禁止 URL userinfo、query 和 fragment。
+- `location=local` 时 host 只允许 `127.0.0.0/8`、`::1` 或解析后仅为 loopback 的 `localhost`，scheme 只允许 HTTP/HTTPS。
 - `location=cloud` 时 scheme 必须为 HTTPS。
-- `headers` 键大小写不敏感地拒绝 `authorization`、`proxy-authorization`、`cookie` 和 `set-cookie`。
 - `credentialRef` 只能是引用，不接受 key 明文。
+- V1 产品 route 不接受任意 `headers` 字段；标准 OpenAI `Authorization: Bearer` 只能由 Host 在每个 step 解析 `credentialRef` 后构造。固定 DSH 上游 catalog 内部的公开归属 header 不属于产品配置，也不得投影到 Client。
 - `contextWindow` 和 token 值为正安全整数。
 - 路径只去除多余尾斜杠，不擅自添加或删除 `/v1`；endpoint 由声明的 provider/wire adapter 构造。
+- V1 route 固定使用 HTTP SSE；产品写入路径拒绝 `websocket`、`websocket-cached` 和 `auto` transport，防止绕过统一 fetch policy。
+- 任何含 `location` 的 V1 产品 route 都强制使用 Harness-owned API-key auth seam：`local` 可没有 credential，`cloud` 必须有 credential；不得因 route id 恰好命中 Pi installed catalog 而继承其环境变量、OAuth store 或 provider-native auth。
+
+### 11.1 共享 Guarded Fetch 契约
+
+模型 route 与 `streamable-http` MCP 只能使用 `@local-harness/guarded-fetch`，不得各自实现重定向、DNS 或 proxy 规则。该包是 Host-only 机制包，不依赖 Pi、MCP SDK、DSH Session 或 Client：
+
+```ts
+export interface GuardedFetchPolicy {
+  readonly destination: 'loopback' | 'https'
+  readonly credentialBound: boolean
+  readonly maxRedirects: 5
+}
+
+export interface GuardedFetchHandle {
+  readonly fetch: typeof globalThis.fetch
+  dispose(): Promise<void>
+}
+
+export function createGuardedFetch(policy: GuardedFetchPolicy): GuardedFetchHandle
+```
+
+行为固定如下：
+
+- `loopback` 只接受 `http:`/`https:` 且完整 DNS 结果均为 `127.0.0.0/8` 或 `::1`；`https` 只接受 `https:`。两者都拒绝 userinfo、query、fragment、非 HTTP(S) URL 和空 hostname。
+- 初始请求与每个 redirect hop 都重新执行相同 destination policy；连接使用该次已验证的 DNS answer set，不允许校验后由 transport 再次解析到不同地址。实现参考固定 DSH `packages/web/web-fetch-http/src/network.ts` 的 `createPinnedLookup()` 和 request-scoped Undici Agent，但不得 import 上游包的私有 `/src` 路径。
+- `redirect: 'manual'`；只跟随保持 method/body 的 307/308，最多 5 跳。301/302/303、无效/缺失 Location、第 6 跳和不可 replay body 都失败，并取消/释放当前 response body。
+- `credentialBound=true` 时禁止跨 origin redirect；同源比较使用 URL 标准化后的 scheme/hostname/effective port。调用者不能在重定向时自行复制 credential 到另一个 origin。
+- 不读取 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 或代理 credential。V1 的模型/MCP route 是用户显式目的地；系统代理接入留给后续受控配置。
+- handle 跟踪所有活动 request-scoped dispatcher；`dispose()` 先 abort 活动请求，再等待 response body/dispatcher 关闭。最终 Response 的正常读完、取消和异常三条路径都必须释放 dispatcher。
+
+Pi adapter 在调用 `snapshot.models.streamSimple()` 时把 handle 的 `fetch` 放入 `SimpleStreamOptions.fetch`；model discovery 使用同一个 factory。DSH MCP Client 把对应 handle 的 `fetch` 传给 `StreamableHTTPClientTransport`。任何 WebSocket transport 都不在该契约内，因此 V1 模型配置禁止 WebSocket。
 
 ## 12. DshModelStreamBridge
 
@@ -742,6 +774,169 @@ V1 不创建 Pi 专用接口：
 
 KernelDriver 只接收组装后的 `KernelContextSnapshot`。若 Pi package 中出现直接扫描 `SKILL.md`、读取 `.mcp.json` 或管理 Goal/Plan 的代码，视为架构违规。
 
+### 20.1 GUI-managed MCP 配置类型
+
+GUI-managed MCP 只增加 DSH Host 配置控制面，不增加第二个 MCP Client。配置存在 DSH settings namespace `local-harness.mcp`，每个启用记录由 Host 在 DSH Tool Registry 的 deployment-global/root layer 动态挂载一个 `@deepseek-ai/dsh-mcp-client` fiber；所有 Agent scope 按 DSH 继承规则看见它，不能为每个 session 复制连接或配置。固定 composition 中同包实例继续由 Loader 管理且只读。
+
+```ts
+export type McpManagedServerId = string & { readonly __brand: 'McpManagedServerId' }
+
+export interface McpCredentialBinding {
+  /** POSIX credential reference; the resolved value never crosses Host. */
+  readonly credentialRef: string
+  /** Visible, non-secret prefix such as `Bearer `; CR/LF is forbidden. */
+  readonly prefix?: string
+}
+
+export interface McpReconnectPolicyInput {
+  readonly enabled: boolean
+  readonly initialDelayMs: number
+  readonly maxDelayMs: number
+  readonly maxAttempts: number
+}
+
+export interface McpServerCommonInput {
+  readonly serverName: string
+  readonly toolCallTimeoutMs: number
+  readonly reconnect: McpReconnectPolicyInput
+}
+
+export interface McpStdioServerInput extends McpServerCommonInput {
+  readonly transport: 'stdio'
+  readonly command: string
+  readonly args: readonly string[]
+  readonly cwd?: string
+  /** Environment variable name -> Host credential binding. */
+  readonly env: Readonly<Record<string, McpCredentialBinding>>
+}
+
+export interface McpHttpServerInput extends McpServerCommonInput {
+  readonly transport: 'streamable-http'
+  readonly url: string
+  /** Request header name -> Host credential binding. */
+  readonly headers: Readonly<Record<string, McpCredentialBinding>>
+}
+
+export type McpManagedServerInput = McpStdioServerInput | McpHttpServerInput
+
+export interface McpManagedServerRecord {
+  readonly id: McpManagedServerId
+  readonly enabled: boolean
+  readonly config: McpManagedServerInput
+}
+
+export interface McpServerRuntimeView {
+  readonly id: McpManagedServerId
+  /** Monotonic per id; increments for every phase transition, independent of configRevision. */
+  readonly revision: number
+  readonly phase: 'disabled' | 'applying' | 'active' | 'error'
+  readonly toolCount: number
+  readonly errorCode?: string
+  readonly errorMessage?: string
+}
+
+export interface McpCompositionServerView {
+  readonly origin: 'composition'
+  readonly entryId: string
+  readonly serverName: string
+  readonly transport: 'stdio' | 'streamable-http'
+  readonly phase: 'pending' | 'active' | 'failed' | 'disabled'
+  readonly toolCount: number
+}
+
+export interface McpConfigurationSnapshot {
+  readonly configRevision: number
+  readonly managed: readonly McpManagedServerRecord[]
+  readonly runtime: readonly McpServerRuntimeView[]
+  readonly composition: readonly McpCompositionServerView[]
+}
+```
+
+`McpConfigurationSnapshot` 是脱敏视图：它可以返回 credential reference 名和公开 prefix，但禁止返回 resolved value、stdio 子进程环境、最终 HTTP header、tool arguments 或文件内容。credential 是否已配置通过既有 `credentials.describe(refs)` 查询，不复制新的 secret read API。
+
+输入边界固定为：最多 64 个 GUI-managed server；每个 server 最多 128 个 args、64 个 env/header binding；`serverName` 必须匹配 `[A-Za-z0-9_-]{1,32}`；credential reference 必须匹配 `[A-Za-z_][A-Za-z0-9_]*`；prefix 最大 128 UTF-8 bytes 且不得含 CR/LF；timeout/reconnect 数值必须通过 DSH MCP Client schema 的上下界。
+
+stdio `command` 是非空 executable/path，拒绝 NUL、CR/LF 和把 command+args 拼成一个 shell 字符串；`args` 原样作为数组传给 DSH transport。`cwd` 缺省时传空字符串；填写时必须是 Host 规范化后的绝对目录。显式 env 名不得以 `DSH_` 开头。HTTP URL 禁止 userinfo、query 和 fragment，只允许 HTTPS，或 hostname 为 `localhost`/loopback IP literal 的 HTTP；`localhost` 在连接时还必须解析为全 loopback。DSH MCP Client 的 HTTP fetch 必须使用 `redirect: 'manual'`：只允许保留 method/body 的 307/308，每个 Location 重新执行同一 URL policy，最多 5 跳；301/302/303、缺失/非法 Location、超过上限都拒绝。存在任何 credential-bound header 时拒绝跨 origin redirect，不得把解析后的 header 复制给新 origin。Header 名必须是 RFC token，并拒绝 `Host`、`Content-Length`、`Connection`、`Cookie` 和 `Proxy-Authorization`；`Authorization` 允许且其值必须来自 credential binding。
+
+### 20.2 MCP 配置 Remote
+
+Host 新增 `mcpConfiguration` Typert namespace，业务方法固定为：
+
+```ts
+export interface McpMutationResult {
+  readonly targetId: McpManagedServerId
+  readonly snapshot: McpConfigurationSnapshot
+  /** Config is already committed even when runtime application reports error. */
+  readonly application: {
+    readonly phase: 'disabled' | 'applying' | 'active' | 'error' | 'removed'
+    readonly errorCode?: string
+    readonly errorMessage?: string
+  }
+}
+
+export interface McpConfigurationRemote {
+  list(): Promise<McpConfigurationSnapshot>
+  create(
+    input: McpManagedServerInput,
+    expectedRevision: number,
+  ): Promise<McpMutationResult>
+  update(
+    id: McpManagedServerId,
+    input: McpManagedServerInput,
+    expectedRevision: number,
+    acknowledgeToolRename: boolean,
+  ): Promise<McpMutationResult>
+  setEnabled(
+    id: McpManagedServerId,
+    enabled: boolean,
+    expectedRevision: number,
+  ): Promise<McpMutationResult>
+  remove(
+    id: McpManagedServerId,
+    expectedRevision: number,
+  ): Promise<McpMutationResult>
+  reconnect(id: McpManagedServerId): Promise<McpMutationResult>
+}
+
+declare module '@deepseek-ai/dsh-typert-protocol' {
+  interface RemoteErrorDetailsMap {
+    'mcp/config-conflict': { readonly expected: number; readonly actual: number }
+    'mcp/config-invalid': { readonly field: string }
+    'mcp/not-found': { readonly id: McpManagedServerId }
+    'mcp/credential-missing': { readonly id: McpManagedServerId; readonly ref: string }
+    'mcp/server-name-conflict': { readonly serverName: string }
+    'mcp/tool-rename-unacknowledged': { readonly from: string; readonly to: string }
+    'mcp/server-disabled': { readonly id: McpManagedServerId }
+  }
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /** @mode emit */
+    'mcp-configuration/status'(view: McpServerRuntimeView): void
+  }
+}
+
+declare module '@deepseek-ai/dsh-typert-protocol' {
+  interface TypertRemoteEventSelection extends
+    Record<'mcp-configuration/status', true> {}
+}
+```
+
+时序和并发规则：
+
+1. `create` 由 Host 生成 id，忽略任何 Client id，并始终持久化为 `enabled=false`。
+2. `create/update/setEnabled/remove` 都以 `expectedRevision` 对整个 `local-harness.mcp` user section 做 compare-and-swap。revision 不匹配时在任何 credential 解析、fiber dispose/create 前抛 `RemoteError('mcp/config-conflict', ...)`，Client 边界映射为 `MCP_CONFIG_CONFLICT`。
+3. validation 在提交前完成。启用或更新一个已启用记录时，Host 必须先通过 `ctx.credentials.resolve()` 确认所有 reference 存在，但不得缓存/返回 resolved value。
+4. `serverName` 在 GUI-managed records 与 Loader composition MCP entries 的合集内唯一。更新导致 `serverName` 改变时，只有 `acknowledgeToolRename=true` 才允许提交。
+5. settings commit 是唯一配置提交点。commit 后只 reconcile 目标 id：先停止旧 fiber并等待 DSH MCP Client disposal quiescence，再解析最新 credential 并挂载新 fiber；兄弟 MCP 和基础工具不重载。
+6. mutation 不在配置已提交后抛出“仿佛没有写入”的业务异常。外部 server 启动失败通过 `application.phase='error'` 和 runtime view 返回，配置保留以便修正或重连。
+7. `setEnabled(false)` 和 `remove` 必须等待目标 fiber 停止；remove 不调用 `credentials.unset`。`reconnect` 不改 config revision，只重建已启用目标；disabled/not-found 分别返回稳定错误。
+8. Host 监听 `settings/document-updated` 和 `credentials/reference-updated`。外部配置变化执行按 id diff；credential 变化只重建引用该 ref 的已启用记录。并发 reconcile 按 id 串行，旧 generation 的迟到状态不得覆盖新 revision。
+9. `mcp-configuration/status` runtime event 只包含 `McpServerRuntimeView`，其中 revision 是按 id 单调递增的运行序号；Client 按 `(id, revision)` 丢弃旧状态。事件必须声明在 Cordis `Events`，加入 `API_REMOTE_FORWARDED_EVENTS` 的 `emit` allowlist，并由 `TypertRemoteEventSelection` 提供 Client 键类型；状态不写 Session，也不进入 localStorage。
+
+实现文件可以按 DSH 包约定调整名称，但 namespace、字段语义、提交点和错误码不得改变。
+
 ## 21. 错误码
 
 V1 至少固定以下错误码：
@@ -776,8 +971,18 @@ V1 至少固定以下错误码：
 | PROTOCOL | `PROTOCOL_INVALID_ENVELOPE` | false |
 | SECURITY | `SECURITY_PATH_OUTSIDE_WORKSPACE` | false |
 | SECURITY | `SECURITY_NETWORK_TARGET_DENIED` | false |
+| MCP | `MCP_CONFIG_CONFLICT` | true |
+| MCP | `MCP_CONFIG_INVALID` | false |
+| MCP | `MCP_CONFIG_NOT_FOUND` | false |
+| MCP | `MCP_CREDENTIAL_MISSING` | false |
+| MCP | `MCP_SERVER_NAME_CONFLICT` | false |
+| MCP | `MCP_TOOL_RENAME_UNACKNOWLEDGED` | false |
+| MCP | `MCP_SERVER_DISABLED` | false |
+| MCP | `MCP_APPLY_FAILED` | true |
 
 映射上游错误时保留上游 code 于 `causeCode`；产品逻辑只读取本表 code。
+
+MCP Remote 在 DSH wire 上使用现有 `RemoteError` 命名约定，映射固定为：`mcp/config-conflict -> MCP_CONFIG_CONFLICT`、`mcp/config-invalid -> MCP_CONFIG_INVALID`、`mcp/not-found -> MCP_CONFIG_NOT_FOUND`、`mcp/credential-missing -> MCP_CREDENTIAL_MISSING`、`mcp/server-name-conflict -> MCP_SERVER_NAME_CONFLICT`、`mcp/tool-rename-unacknowledged -> MCP_TOOL_RENAME_UNACKNOWLEDGED`、`mcp/server-disabled -> MCP_SERVER_DISABLED`。`MCP_APPLY_FAILED` 是 commit 后 runtime/application 状态，不作为“配置未保存”的 Remote rejection 抛出。
 
 ## 22. 取消和关闭顺序
 
@@ -828,5 +1033,8 @@ AgentHandle dispose 顺序：
 11. Client durable/runtime 去重与 seq 缺口重载。
 12. Session append 失败后 Pi 不再启动新工具。
 13. message ack、tool effect 和 turn settled 三类 flush barrier；flush 失败不得返回成功。
+14. DSH automatic/manual/context-overflow compaction 后 Pi 只读取新 surface generation，失败不覆盖旧 surface或无限重试。
+15. MCP config create 默认 disabled、全记录 CAS、跨来源名称冲突、tool rename acknowledgement 和 committed-but-apply-error 语义。
+16. MCP credential value 不出 Host，credential rotation 只重启引用行，单 server reconcile 不影响兄弟 server。
 
 Mock KernelDriver 必须通过该 suite；PiKernelDriver 必须复用同一 suite。未来其他内核只有通过相同 suite 才能加入默认组合。

@@ -246,6 +246,8 @@ Pi 内核只看见 DSH 组装后的 prompt 和工具快照。因此本地 Skills
 
 V1 插件能力限定为加载用户自己的兼容 Skills/MCP 配置。不得承诺可直接分发 OpenAI curated 插件。
 
+图形化 MCP 管理不是第二套 MCP runtime：Host 在 `local-harness.mcp` DSH settings namespace 中保存 GUI-managed server record，并按 record 动态挂载现有 DSH MCP Client。固定 composition MCP 继续只读展示；两类来源共享同一个 `serverName` 唯一性检查、DSH Tool Registry 和权限管线。Client 只拿脱敏配置与运行状态，credential value 仍由 DSH credential store 在 Host 内解析。
+
 V1 的权限页面只展示并编辑 DSH 实际执行的 workspace、command、network、approval 和 MCP 设置。已安装的 DSH 可执行插件包属于受信任源码；V1 不增加一个只声明但无法由运行时完整执行的便携权限 manifest。跨来源 manifest、细粒度 grant、签名和信任链进入 V1.1。
 
 ## 14. 前端设计边界
@@ -254,12 +256,16 @@ V1 前端沿用 DSH 页面结构、导航、会话列表、工作区、消息卡
 
 需要调整的部分：
 
-1. 品牌名和应用标识改为 Local-Harness-pi。
+1. 产品 chrome 的品牌名、PWA、favicon、侧栏和空会话标志改为 Local-Harness-pi，应用 ID 固定为 `io.localharness.pi`；使用中性 `LHπ` 标志，不复用 DSH 官方 wordmark/鱼形标志。DSH 名称只保留在上游归属、许可、开发者文档和内部兼容标识中。
 2. 设置页增加统一的 Models、Tools & Permissions、Skills、MCP、Experimental 分区。
 3. Composer “+” 菜单提供附件、Skill、MCP/工具、Goal、Plan 入口；其状态与设置页读取同一配置服务。
 4. 工具卡片默认显示摘要、状态和持续时间，参数与原始输出折叠显示。
 5. 流式 assistant 内容使用 transient revision；收到对应 DSH durable seq 后原位收敛，不能生成重复消息。
 6. 会话切换后前端丢弃旧 session 的 transient frame，并从 DSH Session/Query 重新投影。
+7. 设置页提供 GUI-managed MCP 的增删改、启停、冲突处理和单 server 重连；composition MCP 只读。
+8. 保留 DSH 会话重命名、正文搜索、归档/恢复、分叉、导出，以及 Diff/Terminal 展示。
+9. Help/About 显示产品版本、固定上游版本和离线第三方许可。
+10. Web profile 关闭 DSH 默认模型身份句，改由组合层注入 Local-Harness-pi 身份；模型可见的 Web GUI 上下文准确写明产品名，并可注明 built on DeepSeek Harness。
 
 V1 不做全面视觉重构。Codex 用于入口和交互细节参考，DSH 保持视觉和布局基础。
 
@@ -277,6 +283,7 @@ V1 不做全面视觉重构。Codex 用于入口和交互细节参考，DSH 保�
 - `tool/call` 已提交而 `tool/result` 缺失时写 `TOOL_OUTCOME_UNKNOWN` 修复结果；不得自动重放副作用工具。
 - SQLite FTS 可以清空重建；任何索引内容都不能回写覆盖 Session。
 - 前端不得拥有独立的 durable chat 数据库。
+- DSH Compaction 是唯一长会话压缩所有者；自动压力、context overflow 和 `/compact` 都只发布 DSH surface generation，Pi 不保存压缩副本。
 
 详细规则见《会话一致性与恢复》。
 
@@ -309,6 +316,7 @@ V1 必须保持或加强以下 Electron 配置：
 - OpenAI-compatible 本地/云端模型。
 - DSH Tools/Approvals/Workspace。
 - Goal、Plan、Skills、MCP。
+- MCP 图形化增删改、启停、失败隔离和重连。
 - 附件和 PDF 预览。
 - `web_search`、`web_fetch` 和外部浏览器打开。
 - GitHub Release 检查与手动下载提示；Alpha 默认关闭自动安装。
@@ -347,7 +355,7 @@ V1 日志记录：sessionId 的安全短标识、runId、turn/step、provider ro
 1. Unit：消息、stream、tool result、错误和事件映射。
 2. Contract：同一用例分别跑 DSH 默认 loop 测试夹具与 Pi loop，验证 DSH 公共不变量。
 3. Integration：本地 mock OpenAI server、DSH model/tool/session 服务、Pi kernel 完整链路。
-4. Desktop E2E：创建、流式响应、审批、工具、取消、恢复、Goal/Plan、Skill/MCP、PDF 预览和打包。
+4. Desktop E2E：首次模型配置、创建、流式响应、审批、工具、取消、恢复、会话整理/搜索/分叉/导出、长会话压缩、Goal/Plan、Skill/MCP 管理、Diff/Terminal、PDF 预览、About/许可和打包。
 
 恢复测试必须真实终止子进程模拟：provider 流中断、tool start 后退出、append 尾部撕裂、SQLite 缺失/损坏、同 session 双进程竞争。
 
@@ -367,19 +375,21 @@ V1 日志记录：sessionId 的安全短标识、runId、turn/step、provider ro
 
 3. **PR-C：V1 产品闭环**
 
-   设置与“+”菜单、Goal/Plan/Skills/MCP、PDF 预览、手动更新提示、桌面 E2E、打包和发布说明。
+   设置与“+”菜单、Goal/Plan/Skills、图形化 MCP、会话产品闭环、PDF 预览、手动更新提示、桌面 E2E、打包和发布说明。
 
 如 PR-B diff 过大，只允许按“运行/模型桥”和“工具/持久化桥”拆成 B1/B2，最多形成四个 PR。不能按技术层制造更多长期分支。
 
 ## 22. 工期预算
 
-在直接复用 DSH 且不扩大 V1 范围的前提下：
+在直接复用 DSH、由一个主实现 Codex 串行推进、另一个 Codex 独立复审的前提下：
 
-- V1：约 3–4 个日历周。
-- 以 GPT-5.6 Sol Plus 的完整周额度衡量：约 2–3 个周额度。
-- V1.1：额外 1–2 周，约 0.8–1.5 个周额度。
+- V1 乐观：22 个工作日，按 5 个日历周安排。
+- V1 常规：25 个工作日，约 5 个日历周。
+- V1 保守：29 个工作日，约 6 个日历周。
+- 以 GPT-5.6 Sol Plus 的完整周额度衡量：约 3.2–4.7 个周额度；额度等待可能延长日历时间，但不改变净工作日。
+- V1.1 不属于本实施计划的承诺工期。按当前四类范围（Office/PDF 编辑、完整浏览器自动化、签名更新、细粒度安全）只做容量级粗估：额外 4–8 个日历周、约 3–6 个完整周额度；必须在 V1 稳定后另写需求、接口和分 PR 计划再承诺日期，证书采购/签发等待另计。
 
-估算包含源码复核、实现、测试、修复和复审，不包含等待人工决定、模型服务不可用、签名证书申请或上游大版本升级。
+V1 估算包含源码复核、实现、测试、MCP 图形化管理、产品闭环回归、20% 左右集成修复余量和复审；不包含等待人工决定、真实模型服务不可用、签名证书申请或上游大版本升级。不得通过取消 Session/Pi/MCP P0 测试压缩工期，只能减少视觉微调或延期已获批准的 P1。
 
 ## 23. 变更控制
 
