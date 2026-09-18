@@ -1,10 +1,10 @@
 # Local-Harness-pi V1 需求规格
 
-文档版本：1.1
+文档版本：1.2
 
 适用版本：V1
 
-架构基线：DSH 产品平台 + Pi 执行内核 + 单一 DSH 会话事实源
+架构基线：DSH 产品平台 + Pi 对话式工具循环内核 + 单一 DSH 对话/执行恢复事实源
 
 ## 1. 规范用语
 
@@ -171,7 +171,7 @@ Host 只有在该 Inbox splice 通过 Session durability barrier 后才向 Clien
 
 ### FR-020（P0）唯一活动内核
 
-V1 默认组合必须只注册 `@local-harness/pi-agent-loop` 一个 AgentFactory。原 DSH ReactLoopAgent 不得同时激活。
+V1 默认组合必须只激活 `@local-harness/pi-agent-loop` 一个 AgentFactory。该实现必须继承 DSH `AgentLoop` 的创建、恢复、发布、回滚和销毁生命周期，只通过 protected machine-construction seam 构造 `DshPiAgent`；原 DSH ReactLoopAgent 不得同时激活，Pi 包不得复制或重新实现第二套 AgentFactory 生命周期。
 
 ### FR-021（P0）Pi 依赖边界
 
@@ -191,7 +191,7 @@ Pi `Agent.subscribe()` 的异步 listener 必须按顺序 await。`agent_end` �
 
 ### FR-025（P1）未来内核接口
 
-Pi 必须位于 `KernelDriver` 之后。DSH Agent/UI/Session 不得 import Pi 事件类型。V1 不需要第二实现，但应提供 mock driver 完成契约测试。
+Pi 必须位于 `KernelDriver` 之后。DSH Agent/UI/Session 不得 import Pi 事件类型。V1 的 `KernelDriver` 只抽象对话式模型—工具循环，不承诺通用 agent graph、多 Agent 编排或任意后台 workflow。V1 不需要第二实现，但应提供 mock driver 完成契约测试。
 
 ## 8. 模型配置与调用
 
@@ -399,7 +399,7 @@ Playwright/Computer-use、登录态、下载和页面交互进入 V1.1，不是 
 
 ### NFR-001（P0）唯一事实源
 
-任何可以影响恢复后模型行为的事实必须存在于 DSH Session。Pi 内存、SQLite FTS、React store、日志或 telemetry 不得成为补充事实源。
+任何可以影响恢复后模型行为的对话或执行事实必须存在于 DSH Session。Pi 内存、SQLite FTS、React store、日志或 telemetry 不得成为补充事实源。Decision、Evidence、Artifact 等领域对象可以由领域服务拥有独立存储，但其影响模型上下文或执行恢复的稳定引用、状态变化与结果必须写入 DSH Session；领域存储不得复制 transcript 或成为隐含执行日志。
 
 ### NFR-002（P0）追加与不可变性
 

@@ -12,7 +12,7 @@
 
 Local-Harness-pi 的 V1 架构固定为：
 
-> **DSH 产品平台 + Pi 执行内核 + 单一 DSH 会话事实源。**
+> **DSH 产品平台 + Pi 对话式工具循环内核 + 单一 DSH 对话/执行恢复事实源。**
 
 这里的“替换 DSH 内核”有严格边界：仅替换 DSH 默认的 Agent Loop 执行实现，不替换 DSH 的 Electron 桌面壳、Web UI、Agent 注册与生命周期、会话事件模型、持久化、模型配置、工具注册与权限、Goal/Plan、Skills、MCP、附件、设置和插件平台。
 
@@ -69,8 +69,8 @@ V1 必须达到以下结果：
 | 桌面进程、窗口、IPC、打包 | DSH Electron | 保留 DSH 主进程/Host 进程拆分 |
 | 前端布局与状态投影 | DSH Web/Client | 只做品牌与入口调整 |
 | Agent 注册、创建、恢复、销毁 | DSH `AgentRegistry`/`AgentFactory` | Pi 不注册第二个 Agent 身份 |
-| Agent 迭代执行 | Pi Agent Core | 由适配器托管，运行态可丢弃 |
-| 会话事实源 | DSH `Session` + JSONL/Zstd | 所有可恢复事实只追加到这里 |
+| Agent 对话式工具循环 | Pi Agent Core | Loop Engine；由适配器托管，运行态可丢弃 |
+| 对话/执行事实源 | DSH `Session` + JSONL/Zstd | 所有影响恢复后模型行为的事实只追加到这里 |
 | 会话搜索 | DSH SQLite FTS | 派生索引，可删除并重建，不是事实源 |
 | 模型路由与凭据 | DSH LLM + `llm-pi-ai` | Pi 只接收当前请求的冻结模型描述 |
 | 工具目录、执行、审批、限制 | DSH Tools | Pi 工具只是代理包装 |
@@ -79,7 +79,7 @@ V1 必须达到以下结果：
 | 附件与 PDF 预览 | DSH Attachment/Preview | V1 只预览，不编辑 |
 | 更新 | DSH updater | Alpha 默认关闭自动安装，仅检查和手动下载提示 |
 
-所有权冲突时以本表为准。任何新增组件都不得偷偷持久化第二份对话历史。
+所有权冲突时以本表为准。任何新增组件都不得偷偷持久化第二份对话历史。这里的“事实源”特指对话与执行恢复：Decision、Evidence、Artifact 等领域对象可以由领域服务独立持久化，但不得复制 transcript、执行状态或绕过 DSH Session；影响后续模型行为的领域引用与状态变化必须以稳定 ref/event 进入 Session。
 
 ## 6. 源码组合策略
 
@@ -113,7 +113,7 @@ packages/core/agent-loop-pi/
   tests/
 ```
 
-该包应从 DSH `packages/core/agent-loop` 复用 AgentFactory 生命周期、SessionPreparation、创建/恢复和逆序清理逻辑，仅替换 `ReactLoopAgent` 以及与其紧耦合的执行实现。不得为了减少代码重复而同时装载两个 AgentFactory。
+PR-A 必须先在 DSH `packages/core/agent-loop` 提取行为中性的 protected machine-construction seam，默认仍构造 `ReactLoopAgent`。该包继承 DSH `AgentLoop`，只覆盖该 seam 以构造 `DshPiAgent`；不得复制 `AgentFactory`、SessionPreparation、创建/恢复、registry 发布或逆序清理代码。这样上游生命周期修复由两种 machine 自动共享，同时默认组合仍只装载一个 AgentFactory。
 
 默认组合文件中：
 
@@ -146,9 +146,9 @@ V1 禁止运行时依赖：
 
 适配层由三层组成：
 
-1. `DshPiAgentFactory`：实现 DSH `AgentFactory`，复用 DSH 已有创建、恢复、发布和销毁顺序。
+1. `PiAgentLoop`：继承 DSH `AgentLoop`，只覆盖 protected `createMachine()`；`AgentFactory` 生命周期完全由父类拥有。
 2. `DshPiAgent`：实现 DSH `Agent` 运行接口，拥有 DSH Inbox、状态和 Pi 运行实例。
-3. `PiKernelDriver`：唯一与 Pi Agent Core 直接交互的组件，暴露稳定、内核无关的最小接口。
+3. `PiKernelDriver`：唯一与 Pi Agent Core 直接交互的组件，暴露稳定、内核无关的最小 conversational tool-loop 接口；V1 不把它定义成通用 agent graph/runtime。
 
 Pi Agent 的 transcript 只是当前进程中的派生缓存：
 

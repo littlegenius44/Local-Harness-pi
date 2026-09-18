@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 用 `@earendil-works/pi-agent-core@0.85.1` 驱动 DSH Agent，但继续由 DSH 拥有 Session、LLM、Tools、Approval、Prompt、Goal/Plan、Skill 和 MCP，并通过契约测试证明单一会话事实源与崩溃屏障。
+**Goal:** 用 `@earendil-works/pi-agent-core@0.85.1` 驱动 DSH Agent，但继续由 DSH 拥有 Session、LLM、Tools、Approval、Prompt、Goal/Plan、Skill 和 MCP，并通过契约测试证明单一对话/执行恢复事实源与崩溃屏障。
 
-**Architecture:** 新增私有包 `@local-harness/pi-agent-loop`。包内以 `KernelDriver` 隔离 Pi 类型，以 `SessionCommitPort`、`DshModelStreamBridge`、`DshToolBridge` 连接 DSH 服务。一次 Pi run 等于一个 DSH turn；Pi turn 等于 DSH step；DSH next-turn 不进入 Pi follow-up queue。
+**Architecture:** 新增私有包 `@local-harness/pi-agent-loop`。其 `PiAgentLoop` 继承 PR-A 的 DSH `AgentLoop`，只覆盖 machine 构造 seam，不复制 AgentFactory 生命周期。包内以 typed `KernelDriver` 隔离 Pi 类型，以 `SessionCommitPort`、`DshModelStreamBridge`、`DshToolBridge` 连接 DSH 服务。一次 Pi run 等于一个 DSH turn；Pi turn 等于 DSH step；DSH next-turn 不进入 Pi follow-up queue。V1 KernelDriver 是 conversational tool-loop seam，不是通用 agent graph。
 
 **Tech Stack:** TypeScript、Cordis、Vitest、DSH Agent/Session/LLM/Tools APIs、`@earendil-works/pi-agent-core@0.85.1`、`@earendil-works/pi-ai@0.85.1`。
 
@@ -14,7 +14,7 @@
 
 开工前完整阅读：
 
-- DSH：`docs/cookbook/adding-a-package.md`；`packages/core/agent/src/index.ts`、`runtime-types.ts`；`packages/core/agent-loop/src/index.ts`、`agent.ts`、`inbox.ts`、`assistant-stream.ts`、`runtime-context.ts`、`tool-calls.ts`、全部 tests；`packages/core/tools/src/index.ts`；`packages/session/session-persistence/src/handle.ts`；JSONL persistence、projection 和 interrupted-turn repair；`packages/llm/llm-pi-ai/src/adapter.ts`、`context.ts`、`stream.ts`；`packages/api/session-controller/src/commands.ts`；`packages/compaction/compaction-basic/src/index.ts`、`tests/compaction-loop-repro.spec.ts`；`packages/compaction/command-compact/src/index.ts`、`tests/command-compact.spec.ts`。
+- DSH：`docs/cookbook/adding-a-package.md`；`packages/core/agent/src/index.ts`、`runtime-types.ts`；`packages/core/agent-loop/src/index.ts` 中 PR-A 新增的 `AgentLoopMachine`/`AgentMachineCreateInput`/`createMachine()`、`agent.ts`、`inbox.ts`、`assistant-stream.ts`、`runtime-context.ts`、`tool-calls.ts`、全部 tests；`packages/core/tools/src/index.ts`；`packages/session/session-persistence/src/handle.ts`；JSONL persistence、projection 和 interrupted-turn repair；`packages/llm/llm/src/message.ts`、`types.ts`、`llm-pi-ai/src/adapter.ts`、`context.ts`、`stream.ts`；`packages/api/session-controller/src/commands.ts`；`packages/compaction/compaction-basic/src/index.ts`、`tests/compaction-loop-repro.spec.ts`；`packages/compaction/command-compact/src/index.ts`、`tests/command-compact.spec.ts`。
 - Pi：`packages/agent/src/agent.ts`、`agent-loop.ts`、`types.ts`、对应 tests；`packages/ai/src/utils/event-stream.ts` 和 OpenAI Responses/Completions event implementations。
 - Codex：只复核审批/工具调用和会话完成的安全边界，不复制运行时代码。
 
@@ -65,13 +65,14 @@
     "main": "lib/index.js",
     "types": "lib/types/index.d.ts",
     "dependencies": {
+      "@deepseek-ai/dsh-agent-loop": "workspace:*",
       "@earendil-works/pi-agent-core": "0.85.1",
       "@earendil-works/pi-ai": "0.85.1"
     }
   }
   ```
 
-  保留 DSH 包中的 `@deepseek-ai/dsh-brand`、`dsh-util-values`、Schemastery、Zod 依赖。不得加入 Pi CLI、coding-agent 或 harness 子路径。
+  保留 DSH 包中的 `@deepseek-ai/dsh-brand`、`dsh-util-values`、Schemastery、Zod 依赖。对 `@deepseek-ai/dsh-agent-loop` 的生产依赖用于继承唯一 lifecycle 实现，不代表激活第二个 Cordis plugin。不得加入 Pi CLI、coding-agent 或 harness 子路径。
 
 - [ ] 按 DSH `docs/cookbook/adding-a-package.md` 注册项目：`tsconfig.base.json` 增加 `@local-harness/pi-agent-loop` 精确 source alias，`tsconfig.host.json` 增加 `packages/core/agent-loop-pi` project reference；禁止加入 Client aggregate。README 按 core Agent Loop 模板记录 Pi 边界、直接模型上下文与已知限制，运行 `pnpm run doc-sync` 并提交配对文件。
 
@@ -145,7 +146,7 @@
   }
   ```
 
-  `KernelEvent` 使用 `run.started`、`step.started`、`message.started/delta/completed`、`tool.started/progress/completed`、`step.completed`、`run.completed`；此文件不得 import Pi 类型。
+  `KernelEvent` 使用 `run.started`、`step.started`、`message.started/delta/completed`、`tool.started/progress/completed`、`step.completed`、`run.completed`；此文件不得 import Pi 类型。它必须从 `@deepseek-ai/dsh-llm` 复用 `Message`、`ContentBlock` 和 `StreamChunk`：context/initial messages 为 `readonly Message[]`，message event 为 `Message`，delta 为 `StreamChunk`，tool result content 为 `readonly ContentBlock[]`。工具 arguments、abort reason 和脱敏 metadata 在其校验边界仍可为 `unknown`；禁止创建第三套 Local Harness message IR。
 
 - [ ] Mock driver 复用同一个 ordered dispatch：
 
@@ -430,7 +431,7 @@
   git commit -m "feat: preserve DSH inbox semantics around Pi runs"
   ```
 
-## Task B9：复用 AgentFactory 创建/恢复事务并切换默认组合
+## Task B9：通过 DSH machine seam 安装 Pi 并切换默认组合
 
 **Files:**
 
@@ -442,9 +443,9 @@
 - Test: `packages/core/agent-loop-pi/tests/recovery.spec.ts`
 - Modify: `scripts/verify-pi-kernel-boundary.ts`
 
-- [ ] 从固定 DSH `agent-loop/src/index.ts` 逐段复用 SessionPreparation、write handle、scope setup/commit、registry publish、created/disposed pairing 和逆序 rollback；只把 `ReactLoopAgent` 构造替换为 `DshPiAgent`。
+- [ ] `PiAgentLoop extends AgentLoop`，只 override PR-A 提供的 protected `createMachine(input)` 并返回 `new DshPiAgent(...)`。禁止复制或重新实现 SessionPreparation、write handle、scope setup/commit、registry publish、created/disposed pairing、create/resume 和逆序 rollback。
 
-- [ ] 先写创建失败点参数化测试：Session prepare、write ownership、scope setup、seed append、session register、agent register、created listener。每个失败点断言无泄漏 handle/scope/registry entry。
+- [ ] 用 `PiAgentLoop` 复用 DSH lifecycle contract，并写创建失败点参数化测试：Session prepare、write ownership、scope setup、seed append、session register、agent register、created listener。每个失败点断言无泄漏 handle/scope/registry entry；静态门禁断言 Pi 包没有 `implements AgentFactory`、`setupAndPublish` 或 `resumeWith` 的副本。
 
 - [ ] 先写恢复测试：只从 committed DSH prefix 恢复；调用 `interruptedTurnClosers`；开放 tool call 收敛为 `TOOL_OUTCOME_UNKNOWN`，绝不重新执行；Pi state/messages 没有恢复入口。
 
@@ -454,14 +455,14 @@
   "@local-harness/pi-agent-loop": "workspace:*"
   ```
 
-  删除 base 对 `@deepseek-ai/dsh-agent-loop` 的生产依赖，但保留原 package 源码和测试供上游对照。`cordis.patch.yml` 同一位置改为：
+  base 只直接激活新包；新包通过 workspace dependency 继承 `@deepseek-ai/dsh-agent-loop`，但后者不得作为第二条 Cordis plugin 配置出现。保留原 package 源码和测试作为唯一 lifecycle 实现。`cordis.patch.yml` 同一位置改为：
 
   ```yaml
   - id: agent-loop
     name: '@local-harness/pi-agent-loop'
   ```
 
-- [ ] boundary verifier 解析 base patch，断言活动 `AgentFactory` 恰好一个且名称为新包；同时解析 production lock graph，拒绝 Pi harness 子路径和第二 Agent Loop dependency。
+- [ ] boundary verifier 解析 base patch，断言活动 `AgentFactory` 恰好一个且名称为新包；同时解析 production source/lock graph，允许新包依赖 DSH agent-loop superclass，但拒绝第二个被激活的 Agent Loop、复制 lifecycle 标识符和任何 Pi harness 子路径。
 
 - [ ] 运行测试。
 
@@ -547,13 +548,13 @@
 只有触发主计划阈值时才拆：
 
 - B1：Task B1–B4，提交 KernelDriver、消息与 DSH 模型流，但不激活默认组合。
-- B2：Task B5–B10，提交工具/Session/AgentFactory 并切换默认组合。
+- B2：Task B5–B10，提交工具/Session/Pi machine 并切换默认组合。
 
 B1 的 public type 仍只在私有 package 内；B1 不得让半成品包进入 base composition。B2 必须基于 B1，不允许平行修改同一 bridge 文件。
 
 ## PR-B 工期与交接门禁
 
-- 预计净工作量：8–11 个工作日，约 1.3–2.0 个 GPT-5.6 Sol Plus 完整周额度。
-- 推荐节奏：B1–B3 为 2–3 日，B4–B6 为 2–3 日，B7–B9 为 2–3 日，B10/修复为 2 日；不得同时让两个 agent 编辑状态机或 SessionCommitPort。
-- Day 3 检查 KernelDriver/message conversion；Day 6 检查模型/工具/flush；Day 9 检查唯一 AgentFactory、恢复和 compaction；第 10–11 日仅作失败修复与复审。
+- 预计净工作量：7–10 个工作日，约 1.2–1.8 个 GPT-5.6 Sol Plus 完整周额度。
+- 推荐节奏：B1–B3 为 2–3 日，B4–B6 为 2–3 日，B7–B9 为 2 日，B10/修复为 1–2 日；不得同时让两个 agent 编辑状态机或 SessionCommitPort。
+- Day 3 检查 typed KernelDriver/message conversion；Day 6 检查模型/工具/flush；Day 8 检查唯一 AgentFactory、继承 lifecycle、恢复和 compaction；第 9–10 日仅作失败修复与复审。
 - PR-B 不得带入产品 UI。可结束条件是全部 contract matrix、crash recovery、Pi compaction matrix 和 dependency boundary 通过，Draft PR 描述附真实命令输出。

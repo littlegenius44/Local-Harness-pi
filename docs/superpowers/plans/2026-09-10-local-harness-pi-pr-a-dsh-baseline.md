@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 把固定 DSH 快照导入新仓库，保留来源与内部兼容标识，完成 Local-Harness-pi 产品品牌、离线 About/第三方许可、Windows 数据隔离和 Electron 安全基线，并证明未接 Pi 时平台仍可构建运行。
+**Goal:** 把固定 DSH 快照导入新仓库，保留来源与内部兼容标识，完成 Local-Harness-pi 产品品牌、离线 About/第三方许可、Windows 数据隔离和 Electron 安全基线，提取行为中性的 Agent machine 构造 seam，并证明未接 Pi 时平台仍可构建运行。
 
-**Architecture:** 采用源码快照而非运行时多仓组合。保留 DSH npm scope、Cordis plugin id、`dsh-app` 自定义协议和 preload 内部对象名，以避免无收益的大范围改名；只改产品可见标识与桌面专用数据根。PR-A 不修改 Agent Loop 行为。
+**Architecture:** 采用源码快照而非运行时多仓组合。保留 DSH npm scope、Cordis plugin id、`dsh-app` 自定义协议和 preload 内部对象名，以避免无收益的大范围改名；只改产品可见标识与桌面专用数据根。PR-A 不修改 Agent Loop 语义，只提取一个默认仍构造 `ReactLoopAgent` 的 protected machine-construction seam，供 PR-B 继承。
 
 **Tech Stack:** Git、pnpm workspace、TypeScript、Electron 44、Vitest、electron-builder。
 
@@ -14,7 +14,7 @@
 
 开工前完整阅读：
 
-- DSH：根 `AGENTS.md`、`BRAND_GUIDELINES.md`、`docs/architecture.md`、`docs/defensive-patterns.md`、`docs/cookbook/adding-a-package.md`、`scripts/check-workspace-constraints.ts`、`scripts/client-build-environment.ts`；`apps/desktop/src/main.ts`、`host-process.ts`、`paths.ts`、`ipc.ts`、`preload.ts`、`project-manager.ts`、`update-coordinator.ts`、`electron-builder.config.mjs` 及对应 `apps/desktop/tests/*.spec.ts`；`apps/web/public/manifest.webmanifest`、`apps/web/index.html`、`packages/client/ui-brand-official`、`packages/client/ui-settings-models` 与 `packages/bundle/web-app` 的品牌、welcome、system-prompt 实现和测试。
+- DSH：根 `AGENTS.md`、`BRAND_GUIDELINES.md`、`docs/architecture.md`、`docs/defensive-patterns.md`、`docs/cookbook/adding-a-package.md`、`scripts/check-workspace-constraints.ts`、`scripts/client-build-environment.ts`；`apps/desktop/src/main.ts`、`host-process.ts`、`paths.ts`、`ipc.ts`、`preload.ts`、`project-manager.ts`、`update-coordinator.ts`、`electron-builder.config.mjs` 及对应 `apps/desktop/tests/*.spec.ts`；`apps/web/public/manifest.webmanifest`、`apps/web/index.html`、`packages/client/ui-brand-official`、`packages/client/ui-settings-models` 与 `packages/bundle/web-app` 的品牌、welcome、system-prompt 实现和测试；`packages/core/agent-loop/src/index.ts`、`agent.ts`、全部 lifecycle tests，以及 `packages/core/agent/src/types.ts`、`runtime-types.ts`。
 - Codex：桌面安全、设置和 Composer 入口相关实现；只参考交互与安全原则，不复制 Apache-2.0 代码。
 - Pi：本 PR 不接入运行时，只核对 `packages/agent/package.json` 的许可证和版本。
 
@@ -466,7 +466,37 @@
   git commit -m "test: lock the Electron security baseline"
   ```
 
-## Task A6：建立 PR-A 基线证据并提交 Draft PR
+## Task A6：提取 DSH Agent machine 构造 seam
+
+**Files:**
+
+- Modify: `packages/core/agent-loop/src/index.ts`
+- Create: `packages/core/agent-loop/tests/agent-machine-seam.spec.ts`
+- Modify: `packages/core/agent-loop/README.md`
+- Modify: `packages/core/agent-loop/README.zh.md`
+- Modify when required by doc-sync: `packages/core/agent-loop/README.i18n.yaml`
+
+- [ ] 完整执行 [Agent Machine Seam 整改计划](2026-09-18-agent-machine-seam-rectification.md) 的 Task R1。先以测试子类证明 create/resume 都经过构造 seam，默认路径仍返回 `ReactLoopAgent`。
+
+- [ ] 增加 `AgentLoopMachine extends Agent`（唯一额外成员为 DSH lifecycle 所需的 `scope`）和 `AgentMachineCreateInput`；在 `AgentLoop` 中增加 protected `createMachine()`，把唯一 `new ReactLoopAgent(...)` 调用改为该 hook。
+
+- [ ] 禁止开放或覆盖 `prepare()`、`setupAndPublish()`、`createAgent()`、`resume()`、write ownership、registry 发布或 rollback；PR-A 默认 composition 与运行行为不变。
+
+- [ ] 运行聚焦门禁并提交。
+
+  ```powershell
+  pnpm vitest run packages/core/agent-loop/tests
+  pnpm --filter @deepseek-ai/dsh-agent-loop run typecheck
+  pnpm run build:lib
+  pnpm run test:docs
+  git diff --check
+  git add packages/core/agent-loop/src/index.ts packages/core/agent-loop/tests/agent-machine-seam.spec.ts packages/core/agent-loop/README.md packages/core/agent-loop/README.zh.md packages/core/agent-loop/README.i18n.yaml
+  git commit -m "refactor: expose DSH agent machine construction seam"
+  ```
+
+  若 doc-sync 未修改 `README.i18n.yaml`，从 `git add` 参数中省略该文件。
+
+## Task A7：建立 PR-A 基线证据并提交 Draft PR
 
 **Files:**
 
@@ -517,7 +547,7 @@
 
 ## PR-A 工期与交接门禁
 
-- 预计净工作量：4–5 个工作日，约 0.6–0.8 个 GPT-5.6 Sol Plus 完整周额度。
-- Day 1：A1；Day 2–3：A2–A3（包含 Web/模型身份、品牌资产和 About）；Day 4：A4–A5；Day 5 作为 Windows/build 修复和 A6 余量。
-- 可提前结束条件：A1–A5 全部提交、A6 门禁全绿、unpacked artifact 内存在 notice、Draft PR 已发布。
+- 预计净工作量：5–6 个工作日，约 0.7–1.0 个 GPT-5.6 Sol Plus 完整周额度。
+- Day 1：A1；Day 2–3：A2–A3（包含 Web/模型身份、品牌资产和 About）；Day 4：A4–A5；Day 5：A6 seam 与 lifecycle 回归；Day 6 作为 Windows/build 修复和 A7 余量。
+- 可提前结束条件：A1–A6 全部提交、A7 门禁全绿、unpacked artifact 内存在 notice、Draft PR 已发布。
 - 不可顺延到 PR-B：来源锁、产品身份、About/许可、独立 `DSH_HOME`、Electron 安全配置。它们任一失败都阻断 PR-A。
