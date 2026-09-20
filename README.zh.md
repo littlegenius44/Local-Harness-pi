@@ -1,14 +1,14 @@
 # Local-Harness-pi
 
-[English](README.md)
+[English](README.md) | 中文
 
-`Local-Harness-pi` 是一个以 DeepSeek Harness（DSH）为产品平台、以 Pi 为执行内核的本地优先桌面 Coding Agent。
+`Local-Harness-pi` 是一个以 DeepSeek Harness（DSH）为产品平台、以 Pi 为对话式工具循环内核的本地优先桌面 Coding Agent。
 
 项目已确认的架构定义是：
 
-> **DSH 产品平台 + Pi 执行内核 + 单一 DSH 会话事实源。**
+> **DSH 产品平台 + Pi 对话式工具循环内核 + 单一 DSH 对话/执行恢复事实源。**
 
-当前仓库已导入固定的 DSH 源码，正在完成 PR-A 的桌面品牌、独立数据目录与安全基线验收。Pi 执行内核尚未接入；当前代码不代表完整 V1 已交付。实施者应先阅读下列文档，并按来源基线核对上游源码后执行计划。
+当前仓库已导入固定的 DSH 源码，正在完成 PR-A 的桌面品牌、独立数据目录与安全基线验收。Pi 对话式工具循环内核尚未接入；当前代码不代表完整 V1 已交付。实施者应先阅读下列文档，并按来源基线核对上游源码后执行计划。
 
 内部 `dsh` 包名、协议和事件名是上游兼容标识，不是第二个产品。来源和许可见 [UPSTREAM.md](UPSTREAM.md)，桌面开发说明见 [桌面 README](apps/desktop/README.zh.md)。
 
@@ -31,9 +31,11 @@
 
 ## 实施计划
 
+- [Agent machine 构造入口与 PR-A/PR-B 整改](docs/superpowers/plans/2026-09-18-agent-machine-seam-rectification.md)
+
 - [V1 主计划与三个 Draft PR 检查点](docs/superpowers/plans/2026-09-10-local-harness-pi-v1-master.md)
 - [PR-A：DSH 源码基线、桌面品牌与安全边界](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-a-dsh-baseline.md)
-- [PR-B：Pi Agent Core 内核桥与单一会话事实源](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-b-pi-kernel.md)
+- [PR-B：Pi Agent Core 内核桥与单一对话/执行恢复事实源](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-b-pi-kernel.md)
 - [PR-C：OpenAI-compatible 配置与 V1 桌面产品闭环](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-c-product-loop.md)
 
 ## 当前状态
@@ -49,8 +51,8 @@
 
 | 项目 | 用途 | 固定版本 |
 |---|---|---|
-| `deepseek-ai/deepseek-harness` | 产品平台和唯一会话事实源 | `b2e3b2a0125854567a4a5fcba75782e42fe84901` |
-| `earendil-works/pi` | 执行内核 | `acaa253cc8e3f159e6100b6f3874861b1f0bfc99` / `0.85.1` |
+| `deepseek-ai/deepseek-harness` | 产品平台和唯一对话/执行恢复事实源 | `b2e3b2a0125854567a4a5fcba75782e42fe84901` |
+| `earendil-works/pi` | 对话式工具循环内核 | `acaa253cc8e3f159e6100b6f3874861b1f0bfc99` / `0.85.1` |
 | `openai/codex` | 交互、安全与工具入口参考，不作为运行时依赖 | `73a1148c9c775c2a4616ce5096291740a00ed68a` |
 
 以上固定版本用于保证设计可复现。实施者不得在未记录兼容性差异的情况下静默升级上游版本。

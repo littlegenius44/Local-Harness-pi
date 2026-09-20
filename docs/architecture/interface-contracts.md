@@ -1,10 +1,10 @@
 # Local-Harness-pi V1 接口契约
 
-文档版本：1.1
+文档版本：1.2
 
 契约版本：`1`
 
-适用架构：DSH 产品平台 + Pi 执行内核 + 单一 DSH 会话事实源
+适用架构：DSH 产品平台 + Pi 对话式工具循环内核 + 单一 DSH 对话/执行恢复事实源
 
 ## 1. 目的
 
@@ -19,7 +19,7 @@ V1 不再创建一个与 DSH 平行的 REST daemon。桌面 UI 与 Host 继续�
 ```text
 DSH UI/Client
   -> DSH Host Agent API
-  -> DshPiAgentFactory / DshPiAgent
+  -> PiAgentLoop (extends DSH AgentLoop) / DshPiAgent
   -> KernelDriver
   -> PiKernelDriver
   -> @earendil-works/pi-agent-core
@@ -75,7 +75,11 @@ export interface StableFailure {
 
 ## 4. KernelDriver 契约
 
-`KernelDriver` 是未来更换内核的最小 seam。它不定义 Session、模型设置、Tool Registry 或 UI。
+`KernelDriver` 是未来更换对话式工具循环内核的最小 seam。它不定义 Session、模型设置、Tool Registry、UI、通用 agent graph、多 Agent 编排或任意后台 workflow。Kernel public face 直接复用 DSH canonical message types，不创建 Local Harness 消息 IR：
+
+```ts
+import type { ContentBlock, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
+```
 
 ```ts
 export type KernelId = 'pi'
@@ -115,7 +119,7 @@ export interface KernelToolSchema {
 export interface KernelContextSnapshot {
   readonly sessionId: SessionId
   readonly systemPrompt: string
-  readonly messages: readonly unknown[]
+  readonly messages: readonly Message[]
   readonly tools: readonly KernelToolSchema[]
   readonly model: FrozenModelSelection
   readonly sessionSurfaceGeneration: number
@@ -125,7 +129,7 @@ export interface KernelRunInput {
   readonly runId: RunId
   readonly sessionId: SessionId
   readonly turn: number
-  readonly initialMessages: readonly unknown[]
+  readonly initialMessages: readonly Message[]
   readonly initialContext: KernelContextSnapshot
   readonly signal: AbortSignal
 }
@@ -173,19 +177,19 @@ export type KernelEvent =
   | {
       readonly type: 'message.started'
       readonly position: TurnPosition
-      readonly message: unknown
+      readonly message: Message
     }
   | {
       readonly type: 'message.delta'
       readonly position: TurnPosition
       readonly messageId: MessageId
       readonly streamRevision: number
-      readonly delta: unknown
+      readonly delta: StreamChunk
     }
   | {
       readonly type: 'message.completed'
       readonly position: TurnPosition
-      readonly message: unknown
+      readonly message: Message
     }
   | {
       readonly type: 'tool.started'
@@ -250,18 +254,42 @@ export type KernelEvent =
 
 Pi `Agent.subscribe()` 必须使用 async listener，不能使用低层只观察而不等待的 `EventStream` 作为提交屏障。若实现使用 `runAgentLoop`，必须传入并 await `AgentEventSink`，达到同等屏障语义。
 
-## 7. DSH AgentFactory 适配
+## 7. DSH Agent machine 构造 seam
 
-DSH 公共接口保持上游形状：
+DSH `AgentLoop` 继续是唯一 `AgentFactory` 生命周期实现。PR-A 在固定基线中加入以下行为中性 seam；默认实现仍创建 `ReactLoopAgent`：
 
 ```ts
-export class DshPiAgentFactory implements AgentFactory {
-  createAgent(ownerCtx: Context, options: CreateAgentOptions): Promise<AgentHandle>
-  resume(ownerCtx: Context, options: ResumeAgentOptions): Promise<AgentHandle>
+import type { Scope } from '@deepseek-ai/dsh-scope'
+
+export interface AgentLoopMachine extends Agent {
+  readonly scope: Scope
+}
+
+export interface AgentMachineCreateInput {
+  readonly ctx: Context
+  readonly id: SessionId
+  readonly options: AgentOptions
+  readonly session: Session
+}
+
+export class AgentLoop extends Service implements AgentFactory {
+  protected createMachine(input: AgentMachineCreateInput): AgentLoopMachine {
+    return new ReactLoopAgent(input.ctx, input.id, input.options, input.session)
+  }
 }
 ```
 
-实现必须复用或等价保持 DSH 固定基线中的顺序：
+Pi 包只继承并覆盖这个构造点：
+
+```ts
+export class PiAgentLoop extends AgentLoop {
+  protected override createMachine(input: AgentMachineCreateInput): AgentLoopMachine {
+    return new DshPiAgent(input.ctx, input.id, input.options, input.session)
+  }
+}
+```
+
+禁止覆盖或复制 `prepare()`、`setupAndPublish()`、`createAgent()`、`resume()`、write ownership、registry 发布和 rollback。父类必须保持 DSH 固定基线中的顺序：
 
 1. 准备未发布的 Session。
 2. 获取 persistence write handle。
@@ -280,7 +308,7 @@ export class DshPiAgentFactory implements AgentFactory {
 1. 先获取同 session 的 write ownership。
 2. 读取物理有效的 committed prefix。
 3. 使用 DSH `interruptedTurnClosers` 追加语义修复事件。
-4. 由修复后的 DSH Session 构造 `DshPiAgent`。
+4. 由修复后的 DSH Session 经 `createMachine()` 构造 `DshPiAgent`。
 5. 绝不恢复 Pi 内存 transcript。
 
 ## 8. DshPiAgent 契约
@@ -548,7 +576,7 @@ export interface DshToolCall {
 export interface DshToolBridgeResult {
   readonly callId: ToolCallId
   readonly sourceIndex: number
-  readonly content: readonly unknown[]
+  readonly content: readonly ContentBlock[]
   readonly isError: boolean
   readonly error?: Readonly<{ name?: string; code?: string; message: string }>
   readonly meta?: unknown
@@ -1023,7 +1051,7 @@ AgentHandle dispose 顺序：
 1. Kernel event 合法顺序和每类非法顺序。
 2. async sink 的提交屏障。
 3. cancel 首因和幂等。
-4. DSH AgentFactory 发布/回滚/销毁顺序。
+4. DSH AgentLoop seam 的默认 React 行为，以及 Pi 子类继承的发布/回滚/销毁顺序。
 5. next-turn/next-step/keepInbox 语义。
 6. DSH↔Pi message/stream round trip。
 7. 模型 step freeze 与下 step 切换。
