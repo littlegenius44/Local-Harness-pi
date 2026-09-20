@@ -10,7 +10,7 @@ import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
-import AgentLoop, { type AgentLoopMachine, type AgentMachineCreateInput } from '../src/index.ts'
+import AgentLoop, { type AgentLoopMachine, type AgentMachineCreateInput, type Config } from '../src/index.ts'
 import { ReactLoopAgent } from '../src/agent.ts'
 
 const cleanup: Array<() => Promise<void>> = []
@@ -20,7 +20,7 @@ afterEach(async () => {
 
 class InjectedMachine extends ReactLoopAgent {}
 
-async function harness(fail = false, useDefault = false) {
+async function harness(fail = false, useDefault = false, config: Config = { agents: [] }) {
   const root = await mkdtemp(join(tmpdir(), 'dsh-machine-seam-'))
   cleanup.push(() => rm(root, { recursive: true, force: true }))
   const ctx = new Context()
@@ -41,7 +41,7 @@ async function harness(fail = false, useDefault = false) {
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(JsonlSessionPersistence, { root })
-  const fiber = await ctx.plugin(useDefault ? AgentLoop : TestLoop, { agents: [] })
+  const fiber = await ctx.plugin(useDefault ? AgentLoop : TestLoop, config)
   return { ctx, inputs, failure, fiber }
 }
 
@@ -101,6 +101,34 @@ describe('AgentLoop machine construction', () => {
       sessionId: SessionId('cancelled'), signal: AbortSignal.abort(reason),
     })).rejects.toBe(reason)
     expect(inputs).toHaveLength(0)
+  })
+
+  it('uses the hook for a declarative startup agent', async () => {
+    const id = SessionId('configured-machine')
+    const { ctx, inputs } = await harness(false, false, {
+      agents: [{ id: 'configured', sessionId: id }],
+    })
+    await vi.waitFor(() => expect(ctx.agents.get(id)).toBeInstanceOf(InjectedMachine))
+    expect(inputs).toHaveLength(1)
+    expect(inputs[0]?.id).toBe(id)
+  })
+
+  it('releases resume write ownership when construction throws', async () => {
+    const { ctx, failure, inputs } = await harness(true)
+    const id = SessionId('resume-construction-failure')
+    const session = ctx.sessions.prepare(id)
+    const seed = await ctx.sessionPersistence.create(session.header)
+    await seed.append([
+      { type: 'turn/start', seq: SessionSeq(0), time: 1, data: { turn: 1 } },
+      { type: 'turn/end', seq: SessionSeq(1), time: 2, data: { turn: 1, reason: { kind: 'completed' } } },
+    ])
+    await seed.close()
+    await expect(ctx.agents.resume({ resumeSessionId: id })).rejects.toBe(failure)
+    expect(inputs).toHaveLength(1)
+    expect(ctx.agents.get(id)).toBeUndefined()
+    expect(ctx.sessions.get(id)).toBeUndefined()
+    const writer = await ctx.sessionPersistence.open(id, 'write')
+    await writer.close()
   })
 
   it('factory teardown cancels and drains the injected machine exactly once', async () => {
