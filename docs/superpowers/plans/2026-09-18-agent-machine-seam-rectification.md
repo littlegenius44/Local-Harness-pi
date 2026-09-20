@@ -1,23 +1,25 @@
 # Agent Machine Seam Rectification Implementation Plan
 
+English | [中文](2026-09-18-agent-machine-seam-rectification.zh.md)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在不复制 DSH `AgentFactory` 生命周期的前提下接入 Pi conversational tool-loop，并把消息边界、唯一事实源和 PR-B 前置门禁收紧到可直接实现的程度。
+**Goal:** Integrate the Pi conversational tool-loop without duplicating the DSH `AgentFactory` lifecycle, and make the message boundary, single source of truth, and PR-B prerequisites directly implementable.
 
-**Architecture:** PR-A 在 DSH `AgentLoop` 中提取一个行为中性的 `createMachine()` protected seam，默认仍构造 `ReactLoopAgent`；PR-B 的 `PiAgentLoop` 继承该类，只替换 machine 构造。Kernel 边界直接使用 DSH canonical `Message`、`ContentBlock` 和 `StreamChunk`，不创建第三套 Local Harness 消息 IR。DSH Session 只垄断会影响恢复后模型行为的 conversation/execution facts，领域数据仍由各自服务拥有。
+**Architecture:** PR-A extracts a behavior-neutral protected `createMachine()` seam from DSH `AgentLoop`, defaulting to `ReactLoopAgent`; PR-B subclasses it as `PiAgentLoop` and replaces only machine construction. The Kernel boundary directly uses canonical DSH `Message`, `ContentBlock`, and `StreamChunk` types, without a third Local Harness message IR. DSH Session exclusively owns conversation/execution facts that affect model behavior after recovery; domain services retain ownership of domain data.
 
-**Tech Stack:** TypeScript 6、Cordis、DSH Agent/Session/LLM APIs、Vitest、`@earendil-works/pi-agent-core@0.85.1`。
+**Tech Stack:** TypeScript 6, Cordis, DSH Agent/Session/LLM APIs, Vitest, `@earendil-works/pi-agent-core@0.85.1`.
 
 ---
 
-## 0. 与正在实施的 PR-A 协调
+## 0. Coordinate with PR-A in progress
 
-截至 2026-09-18，GitHub 上没有可见的 PR-A Draft PR 或远端分支，本地也只有 `main`。因此本计划只更新 `main` 上的权威文档，不重置、覆盖或猜测另一任务中的未提交代码。
+As of 2026-09-18, GitHub had no visible PR-A Draft PR or remote branch, and the local checkout contained only `main`. This plan therefore updates only the authoritative documents on `main`; it does not reset, overwrite, or guess at uncommitted code in another task.
 
-另一任务继续 PR-A 前必须：
+Before continuing PR-A, the other task must:
 
-- [ ] 先在其工作区提交当前 checkpoint；存在未提交修改时不得 rebase。
-- [ ] 获取并整合本次文档提交。
+- [ ] Commit its current workspace checkpoint first; do not rebase with uncommitted changes.
+- [ ] Fetch and integrate this documentation commit.
 
   ```powershell
   git status --short
@@ -25,12 +27,12 @@
   git rebase origin/main
   ```
 
-  若 PR-A 已推送且不适合 rebase，使用 `git merge origin/main`，禁止 force-push 覆盖他人提交。
+  If PR-A has been pushed and rebasing is inappropriate, use `git merge origin/main`. Never force-push over another contributor's commits.
 
-- [ ] 确认当前分支包含本文档，并把下方 Task R1 作为 PR-A 的新 Task A6；原 Draft PR 证据任务顺延为 A7。
-- [ ] 只有完成 DSH 固定快照导入后才实施 R1；在尚无 `packages/core/agent-loop` 时不得手写占位文件。
+- [ ] Confirm that the current branch contains this document. Make Task R1 below the new PR-A Task A6; move the Draft PR evidence task to A7.
+- [ ] Implement R1 only after importing the pinned DSH snapshot. Do not create placeholder files before `packages/core/agent-loop` exists.
 
-## Task R1：在 PR-A 提取行为中性的 machine 构造 seam
+## Task R1: Extract behavior-neutral machine construction in PR-A
 
 **Files:**
 
@@ -40,17 +42,17 @@
 - Modify: `packages/core/agent-loop/README.zh.md`
 - Modify when required by doc-sync: `packages/core/agent-loop/README.i18n.yaml`
 
-- [ ] 重新阅读固定 DSH commit 中 `packages/core/agent-loop/src/index.ts`、`agent.ts`、全部生命周期测试，以及 `packages/core/agent/src/types.ts`、`runtime-types.ts`。记录直接构造 `ReactLoopAgent` 的位置和 `AgentLoop` 对 machine 实际使用的成员。
+- [ ] Reread `packages/core/agent-loop/src/index.ts`, `agent.ts`, all lifecycle tests, and `packages/core/agent/src/types.ts` and `runtime-types.ts` at the pinned DSH commit. Record the direct `ReactLoopAgent` construction site and the machine members actually used by `AgentLoop`.
 
-- [ ] 先写失败测试。测试通过一个测试子类覆盖构造 hook，并断言 create 与 resume 都使用注入 machine；同时复用/补充现有测试，断言默认 `AgentLoop` 仍构造 `ReactLoopAgent`，发布顺序、失败回滚、dispose 顺序和配置启动行为不变。
+- [ ] Write failing tests first. Override the construction hook in a test subclass and assert that create and resume both use the injected machine. Reuse or extend existing tests to prove that default `AgentLoop` still constructs `ReactLoopAgent`, preserving publication order, failure rollback, disposal order, and configured startup behavior.
 
   ```powershell
   pnpm vitest run packages/core/agent-loop/tests/agent-machine-seam.spec.ts
   ```
 
-  Expected: 新 hook 尚不存在，类型检查或测试失败。
+  Expected: The new hook does not exist yet, so type checking or tests fail.
 
-- [ ] 在 `index.ts` 增加最小 public seam。标识名可因上游现有导出冲突微调，但形状必须等价：
+- [ ] Add the minimal public seam in `index.ts`. Names may be adjusted for existing upstream export conflicts, but the shape must remain equivalent:
 
   ```ts
   import type { Scope } from '@deepseek-ai/dsh-scope'
@@ -73,19 +75,19 @@
   }
   ```
 
-  将 `PreparedAgent.agent` 和内部 `machine` 类型改为 `AgentLoopMachine`，唯一直接构造点改为：
+  Change `PreparedAgent.agent` and the internal `machine` type to `AgentLoopMachine`, and replace the sole direct construction site with:
 
   ```ts
   machine = this.createMachine({ ctx: loopCtx, id, options, session })
   ```
 
-  禁止把 `prepare()`、`setupAndPublish()`、`createAgent()`、`resume()`、registry 发布、write handle 或 rollback 做成 Pi 专用 override 点；本 seam 只负责构造 machine。
+  Do not turn `prepare()`, `setupAndPublish()`, `createAgent()`, `resume()`, registry publication, write handles, or rollback into Pi-specific override points. This seam constructs only the machine.
 
-- [ ] 测试 hook 抛错、owner/factory abort、create/resume、dispose 的默认路径。子类返回的 fake machine 必须具有真实 `Scope`，不可用类型断言掩盖接口缺口。
+- [ ] Test hook exceptions, owner/factory abort, create/resume, and default disposal paths. A fake machine returned by a subclass must have a real `Scope`; do not hide interface gaps with type assertions.
 
-- [ ] 文档明确：hook 的输入在一次构造中只读；实现不得保留第二份 Session write handle；子类 machine 仍必须遵守 DSH `Agent` 运行契约。
+- [ ] Document that hook inputs are read-only during construction, implementations must not retain a second Session write handle, and subclass machines must still obey the DSH `Agent` runtime contract.
 
-- [ ] 运行聚焦门禁并提交。
+- [ ] Run the focused checks and commit.
 
   ```powershell
   pnpm vitest run packages/core/agent-loop/tests
@@ -97,9 +99,9 @@
   git commit -m "refactor: expose DSH agent machine construction seam"
   ```
 
-  若 `README.i18n.yaml` 未被 doc-sync 修改，不把不存在的修改强加进提交。
+  If doc-sync did not change `README.i18n.yaml`, do not manufacture a change for the commit.
 
-## Task R2：在 PR-B 把 Kernel 边界改为 DSH canonical types
+## Task R2: Use DSH canonical types at the Kernel boundary in PR-B
 
 **Files:**
 
@@ -108,7 +110,7 @@
 - Create: `packages/core/agent-loop-pi/tests/kernel-driver.spec.ts`
 - Create: `packages/core/agent-loop-pi/tests/message-converter.spec.ts`
 
-- [ ] `KernelContextSnapshot.messages` 与 `KernelRunInput.initialMessages` 使用 `readonly Message[]`；message started/completed 使用 DSH `Message`（可证明为 assistant-only 时收窄为 `AssistantMessage`）；delta 使用 DSH `StreamChunk`；工具结果 content 使用 `readonly ContentBlock[]`。
+- [ ] Use `readonly Message[]` for `KernelContextSnapshot.messages` and `KernelRunInput.initialMessages`; DSH `Message` for message started/completed (narrow to `AssistantMessage` only when proven assistant-only); DSH `StreamChunk` for deltas; and `readonly ContentBlock[]` for tool result content.
 
   ```ts
   import type { ContentBlock, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
@@ -123,11 +125,11 @@
     | { readonly type: 'message.completed'; readonly message: Message; /* position */ }
   ```
 
-- [ ] 保留真正不透明的值为 `unknown`：工具 arguments 在 schema 校验前、abort reason、脱敏错误 details、Pi 私有 metadata。不得为了消灭 `unknown` 新建 Local Harness `Message`、`ContentBlock` 或 `StreamChunk`。
+- [ ] Keep genuinely opaque values as `unknown`: tool arguments before schema validation, abort reasons, sanitized error details, and private Pi metadata. Do not create Local Harness `Message`, `ContentBlock`, or `StreamChunk` types merely to remove `unknown`.
 
-- [ ] 用 fixture 覆盖 Unicode、图片、reasoning、并行 tool call、error tool result 和未知 metadata；DSH→Pi→DSH 转换不得丢失稳定 id、source、content 或 finish reason。
+- [ ] Cover Unicode, images, reasoning, parallel tool calls, error tool results, and unknown metadata with fixtures. DSH→Pi→DSH conversion must preserve stable ids, source, content, and finish reason.
 
-- [ ] 运行并提交。
+- [ ] Run and commit.
 
   ```powershell
   pnpm vitest run packages/core/agent-loop-pi/tests/kernel-driver.spec.ts packages/core/agent-loop-pi/tests/message-converter.spec.ts
@@ -136,7 +138,7 @@
   git commit -m "feat: define the typed conversational kernel boundary"
   ```
 
-## Task R3：在 PR-B 以继承方式安装 Pi machine
+## Task R3: Install the Pi machine through inheritance in PR-B
 
 **Files:**
 
@@ -148,7 +150,7 @@
 - Modify: `packages/bundle/base/cordis.patch.yml`
 - Modify: `scripts/verify-pi-kernel-boundary.ts`
 
-- [ ] `@local-harness/pi-agent-loop` 对 `@deepseek-ai/dsh-agent-loop` 建立 workspace production dependency。它继承 lifecycle，不复制其源码：
+- [ ] Add a workspace production dependency from `@local-harness/pi-agent-loop` to `@deepseek-ai/dsh-agent-loop`. Inherit the lifecycle without copying its source:
 
   ```ts
   import { AgentLoop, type AgentLoopMachine, type AgentMachineCreateInput } from '@deepseek-ai/dsh-agent-loop'
@@ -162,13 +164,13 @@
   export default PiAgentLoop
   ```
 
-- [ ] `DshPiAgent` 只实现 DSH `Agent`/`AgentLoopMachine` 的运行语义和 `scope`；不实现 `AgentFactory`，不打开 Session persistence handle，不发布 registry lifecycle event。
+- [ ] `DshPiAgent` implements only DSH `Agent`/`AgentLoopMachine` runtime semantics and `scope`; it must not implement `AgentFactory`, open Session persistence handles, or publish registry lifecycle events.
 
-- [ ] base composition 只激活 `@local-harness/pi-agent-loop`。允许它依赖 DSH agent-loop superclass；门禁禁止的是第二个被 Cordis 激活的 factory、复制 lifecycle 源码和 Pi Harness 子路径，不是禁止 lock graph 出现 DSH agent-loop。
+- [ ] The base composition activates only `@local-harness/pi-agent-loop`. It may depend on the DSH agent-loop superclass. Checks prohibit a second factory activated by Cordis, copied lifecycle source, and Pi Harness subpaths; they do not prohibit DSH agent-loop in the lock graph.
 
-- [ ] lifecycle 测试以 `PiAgentLoop` 跑现有 DSH create/resume/failure matrix，证明继承路径保持 rollback、created/disposed pairing、write ownership 和逆序销毁。加入静态门禁：Pi 包不得声明 `implements AgentFactory`，不得复制 `setupAndPublish`/`resumeWith`。
+- [ ] Run the existing DSH create/resume/failure matrix against `PiAgentLoop` to prove that inheritance preserves rollback, created/disposed pairing, write ownership, and reverse-order disposal. Add static checks: the Pi package must not declare `implements AgentFactory` or copy `setupAndPublish`/`resumeWith`.
 
-- [ ] 运行并提交。
+- [ ] Run and commit.
 
   ```powershell
   pnpm vitest run packages/core/agent-loop-pi/tests/apply.spec.ts packages/core/agent-loop-pi/tests/lifecycle.spec.ts
@@ -179,7 +181,7 @@
   git commit -m "feat: install Pi through the DSH machine seam"
   ```
 
-## Task R4：把 PR-B 结束点设为正式 M0 门禁
+## Task R4: Make the end of PR-B the formal M0 checkpoint
 
 **Files:**
 
@@ -189,17 +191,17 @@
 - Test: `packages/core/agent-loop-pi/tests/crash-recovery.e2e.ts`
 - Test: `packages/core/agent-loop-pi/tests/compaction-through-pi.integration.spec.ts`
 
-- [ ] PR-B 通过后标记 `M0 Kernel Integration`。M0 是 PR-C 开工的 go/no-go，不是对外 V1 发布。
-- [ ] M0 必须证明：默认组合恰好一个 factory；Pi 只承担 conversational model-tool loop；DSH Session 是 conversation/execution recovery truth；恢复不读取 Pi store；三类 flush barrier、工具乱序提交、Compaction generation 和 crash matrix 全绿。
-- [ ] M0 不引入 Tool Effect Taxonomy、Evidence/Critic store、通用 agent graph、多 Agent 编排或新的领域数据库。领域 `Decision`、`Evidence`、`Artifact` 可由后续领域服务拥有，但凡影响恢复后模型行为的引用、状态变化和执行结果必须以稳定 ref/event 进入 DSH Session。
-- [ ] 将完整命令输出、固定上游 hash、失败注入点和已知限制附到 Draft PR；任何一项失败都不得开始依赖真实 Pi 行为的 PR-C 修改。
+- [ ] Mark `M0 Kernel Integration` after PR-B passes. M0 is the go/no-go for starting PR-C, not the public V1 release.
+- [ ] M0 must prove exactly one factory in the default composition; Pi owns only the conversational model-tool loop; DSH Session is conversation/execution recovery truth; recovery never reads a Pi store; and all three flush barriers, out-of-order tool commits, Compaction generations, and the crash matrix pass.
+- [ ] M0 introduces no Tool Effect Taxonomy, Evidence/Critic store, general agent graph, multi-agent orchestration, or new domain databases. Future domain services may own `Decision`, `Evidence`, and `Artifact`, but references, state changes, and execution results affecting model behavior after recovery must enter DSH Session as stable refs/events.
+- [ ] Attach complete command output, pinned upstream hashes, failure injection points, and known limitations to the Draft PR. If any item fails, do not start PR-C changes that depend on real Pi behavior.
 
-## Task R5：整合、复审与交接
+## Task R5: Integration, review, and handoff
 
-- [ ] PR-A 在包含本整改文档的提交上完成 R1；PR 描述增加 `AgentLoop` seam diff 和默认 React 回归证据。
-- [ ] PR-B 只能基于已合入的 PR-A；禁止临时 cherry-pick seam 后让两条长期分支各自维护版本。
-- [ ] 独立复审必须逐项检查：只有一个直接 `ReactLoopAgent` 默认构造点、Pi 仅覆盖 `createMachine`、没有 `DshPiAgentFactory`、Kernel 公共消息字段没有 `unknown[]`、base 只激活一个 factory。
-- [ ] 合并前执行：
+- [ ] Complete R1 in PR-A on a commit containing this rectification document. Add the `AgentLoop` seam diff and default React regression evidence to the PR description.
+- [ ] Base PR-B only on merged PR-A. Do not temporarily cherry-pick the seam and maintain separate versions on two long-lived branches.
+- [ ] Independent review must check each item: exactly one direct default `ReactLoopAgent` construction site; Pi overrides only `createMachine`; no `DshPiAgentFactory`; no `unknown[]` in public Kernel message fields; and the base activates only one factory.
+- [ ] Before merging, run:
 
   ```powershell
   rg -n "DshPiAgentFactory|implements AgentFactory|messages: readonly unknown\[\]|initialMessages: readonly unknown\[\]" packages/core/agent-loop-pi
@@ -212,13 +214,13 @@
   git diff --check
   ```
 
-  Expected: `rg` 无命中，其余命令全绿。
+  Expected: `rg` finds no matches, and every other command passes.
 
-## 工期影响
+## Schedule impact
 
-- PR-A：由 4–5 日调整为 5–6 日，增加 seam、回归测试和文档同步。
-- PR-B：由 8–11 日调整为 7–10 日，删除复制与维护 factory lifecycle 的工作。
-- PR-C：仍为 7–9 日；`main` 稳定化仍为 3–4 日。
-- 总净工作量仍为 22–29 日；变化是把 1 日高风险架构工作前移到 PR-A，并减少 PR-B 的重复生命周期实现与复审面。
+- PR-A: Changes from 4–5 days to 5–6 days for the seam, regression tests, and documentation synchronization.
+- PR-B: Changes from 8–11 days to 7–10 days by removing duplicate factory lifecycle implementation and maintenance.
+- PR-C: Remains 7–9 days; `main` stabilization remains 3–4 days.
+- Total net work remains 22–29 days. One day of high-risk architecture work moves forward into PR-A, reducing duplicate lifecycle implementation and review in PR-B.
 
-本计划不改变用户已确认的 V1 产品范围，只纠正实现边界和门禁顺序。
+This plan preserves the user-confirmed V1 product scope and corrects only implementation boundaries and check ordering.
