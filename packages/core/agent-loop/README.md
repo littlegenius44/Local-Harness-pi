@@ -88,6 +88,10 @@ This section explains how the package realizes the behavior above; the observabl
 
 The package is the one concrete implementation of the public `Agent` contract. It registers itself as the `AgentFactory` on `ctx.agents`, so consumers never import this package; ownership of each created agent lives with the caller fiber and the loop provider, converging on one memoized quiescence boundary. Every observable effect happens through session events and the `agent/*` taxonomy — package internals are never part of the public surface.
 
+### Custom machine construction
+
+Subclass `AgentLoop` and override only protected `createMachine(input)` to supply another `AgentLoopMachine`. The default constructs `ReactLoopAgent`. The input properties are read-only construction references; the machine must honor the DSH `Agent` contract and expose its real `Scope`. It must not acquire a second Session write handle. The parent factory retains creation, recovery, publication, rollback, and disposal ownership.
+
 ### Request headers and adapter defaults
 
 After `agent/request`, `ctx.llm.prepareCall()` validates adapter-owned fields and resolves reasoning-effort and output-token defaults under the active turn signal. The loop retains that exact adapter through resolution, `request/header` logging, and dispatch. It writes a full header for the first request, a changed envelope (config or tools — the prompt is not part of the header), an explicit message-series start, a request after surface replacement (an in-place prompt replacement or compaction), and resume; unchanged steps, retries, and ordinary later turns in the same series inherit the latest header, and an in-history prompt append is not a replacement, so the request that follows it inherits the header too. Beside the header, the loop logs `request/context` — provider, model, `contextWindow`, and the route's `systemPromptUpdate` mode from `prepareCall()` — only when one of those differs from the latest snapshot. Before the next waterfall, the loop removes adapter-default fields so the current route resolves them again, while explicit settings persist. An unhandled route still fails with `NO_ADAPTER`.

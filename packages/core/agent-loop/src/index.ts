@@ -32,6 +32,7 @@ import type {} from '@deepseek-ai/dsh-session-projection'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import { SessionPersistenceNotFoundError } from '@deepseek-ai/dsh-session-persistence'
 import type { SessionHandle, SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
+import type { Scope } from '@deepseek-ai/dsh-scope'
 import { ReactLoopAgent } from './agent.ts'
 import { DEFAULT_MAX_PARALLEL_TOOL_CALLS } from './constants.ts'
 
@@ -211,7 +212,7 @@ interface StoredSession {
 
 /** Prepared-but-unpublished agent resources sharing one memoized teardown. */
 interface PreparedAgent {
-  agent: ReactLoopAgent
+  agent: AgentLoopMachine
   /** Aborts when the factory unloads, the caller cancels, or teardown begins — ends any setup await. */
   signal: AbortSignal
   /** Enter registries, announce, notify session-start, and start the machine. */
@@ -353,6 +354,19 @@ function validateConfiguredAgents(agents: Config['agents']): void {
     }
     exactIdentities.set(exactIdentity, id)
   }
+}
+
+/** Agent runtime whose scope is unwound by the factory after quiescence. */
+export interface AgentLoopMachine extends Agent {
+  readonly scope: Scope
+}
+
+/** Borrowed construction inputs; the factory retains Session write ownership. */
+export interface AgentMachineCreateInput {
+  readonly ctx: Context
+  readonly id: SessionId
+  readonly options: AgentOptions
+  readonly session: Session
 }
 
 /** Concrete agent factory and driver service. */
@@ -565,7 +579,7 @@ export class AgentLoop extends Service implements AgentFactory {
     callerSignal?.addEventListener('abort', onCallerAbort, { once: true })
     this.ownership.signal.addEventListener('abort', onFactoryTeardown, { once: true })
 
-    let machine: ReactLoopAgent | undefined
+    let machine: AgentLoopMachine | undefined
     let detachSession: (() => void) | undefined
     let detachAgent: (() => void) | undefined
     let disposing: Promise<void> | undefined
@@ -618,10 +632,11 @@ export class AgentLoop extends Service implements AgentFactory {
       }
     })())
     const untrack = this.ownership.track(dispose)
+    const createMachine = (): AgentLoopMachine => this.createMachine({ ctx: loopCtx, id, options, session })
     let unfollowOwner: () => Promise<void> | void
     try {
       unfollowOwner = ownerCtx.effect(function* () {
-        machine = new ReactLoopAgent(loopCtx, id, options, session)
+        machine = createMachine()
         machineReady.resolve()
         yield machine.scope.rawDispose
         yield () => {
@@ -684,6 +699,17 @@ export class AgentLoop extends Service implements AgentFactory {
       void dispose().catch(() => {})
       throw error
     }
+  }
+
+  /**
+   * Construct a machine under the factory-owned lifecycle. Overrides must honor
+   * the Agent contract and must not acquire a second Session write handle.
+   * Inputs are borrowed for construction; publication and rollback stay here.
+   * @param input - context, identity, options, and prepared Session.
+   * @returns an unpublished runtime with a real lifecycle scope.
+   */
+  protected createMachine(input: AgentMachineCreateInput): AgentLoopMachine {
+    return new ReactLoopAgent(input.ctx, input.id, input.options, input.session)
   }
 
   /**
