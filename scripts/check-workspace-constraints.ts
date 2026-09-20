@@ -322,6 +322,13 @@ export function checkDshFamilyVersion(manifest: PackageManifest, expected: strin
 export function checkWorkspaceManifest({ dir, manifest }: WorkspaceManifest): string[] {
   const errors = checkExperimentalManifest({ dir, manifest })
   const label = manifest.name ?? dir
+  const isLocalPackage = /^packages\/(?!experimental\/)[^/]+\/[^/]+$/.test(dir)
+    && manifest.name?.startsWith('@local-harness/') === true
+  if (isLocalPackage) {
+    if (manifest.private !== true) errors.push(`${label}: Local-Harness package must set "private": true`)
+    if (manifest.publishConfig !== undefined) errors.push(`${label}: Local-Harness package must omit publishConfig`)
+    if (manifest.version !== repositoryVersion) errors.push(`${label}: package.json version must match root version ${repositoryVersion ?? '(missing)'}`)
+  }
   const familyVersionError = checkDshFamilyVersion(manifest, repositoryVersion)
   if (familyVersionError !== undefined) errors.push(familyVersionError)
   const isNativePackageDir = dir.startsWith('native/system/packages/')
@@ -342,7 +349,7 @@ export function checkWorkspaceManifest({ dir, manifest }: WorkspaceManifest): st
       || manifest.repository.directory !== expectedDirectory) {
       errors.push(`${label}: published Landlock package repository must use ${repositoryUrl} with directory ${expectedDirectory} for trusted publishing`)
     }
-  } else if (isReleaseMemberDirectory(dir)) {
+  } else if (isReleaseMemberDirectory(dir) && !isLocalPackage) {
     // Release members state that they are publishable: npm refuses a private
     // package, and the repository field is how a consumer finds the source of
     // the package it installed.
@@ -371,7 +378,7 @@ export function checkWorkspaceManifest({ dir, manifest }: WorkspaceManifest): st
     return errors
   }
 
-  if (manifest.name?.startsWith('@deepseek-ai/')) {
+  if (manifest.name !== undefined && (manifest.name.startsWith('@deepseek-ai/') || isLocalPackage)) {
     const allowedSources = publicationSourceAllowlist[manifest.name] ?? []
     for (const file of manifest.files ?? []) {
       if (isForbiddenPublicationFile(file) && !allowedSources.includes(file)) {
@@ -398,12 +405,12 @@ export function checkWorkspaceManifest({ dir, manifest }: WorkspaceManifest): st
     }
   }
 
-  if (dir.startsWith('packages/') && manifest.name?.startsWith('@deepseek-ai/dsh-')) {
+  if (dir.startsWith('packages/') && (manifest.name?.startsWith('@deepseek-ai/dsh-') || isLocalPackage)) {
     const peer = manifest.peerDependencies?.['@deepseek-ai/cordis']
     const dev = manifest.devDependencies?.['@deepseek-ai/cordis']
 
-    if (!peer) errors.push(`${label}: @deepseek-ai/cordis must be a peerDependency`)
-    if (!dev) errors.push(`${label}: @deepseek-ai/cordis must also be a devDependency`)
+    if (!isLocalPackage && !peer) errors.push(`${label}: @deepseek-ai/cordis must be a peerDependency`)
+    if (!isLocalPackage && !dev) errors.push(`${label}: @deepseek-ai/cordis must also be a devDependency`)
     if (peer && dev && peer !== dev) {
       errors.push(`${label}: @deepseek-ai/cordis peer (${peer}) and dev (${dev}) ranges must match`)
     }

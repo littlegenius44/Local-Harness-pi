@@ -75,6 +75,24 @@ afterEach(() => {
 })
 
 describe('desktop host process', () => {
+  it('overrides an inherited Harness home with the Electron-owned home', async () => {
+    const project = projectWithHost(`
+process.send({ type: 'ready', protocolVersion: 3, dshVersion: process.env.DSH_HOME })
+function onRequestFrame() {}
+`)
+    const harnessHome = join(project, '用户 数据', 'harness')
+    const previous = process.env.DSH_HOME
+    process.env.DSH_HOME = join(project, 'shared-cli-home')
+    const host = new DesktopHostProcess(process.execPath, project, harnessHome)
+    try {
+      await expect(host.start()).resolves.toMatchObject({ dshVersion: harnessHome })
+    } finally {
+      if (previous === undefined) delete process.env.DSH_HOME
+      else process.env.DSH_HOME = previous
+      await host.stop().catch(() => undefined)
+    }
+  })
+
   it('carries raw request and response bytes and shuts the child down cleanly', async () => {
     const project = projectWithHost(`
 const bodies = new Map()
@@ -98,7 +116,7 @@ function answer(streamId) {
 `)
     const previous = process.env.NODE_OPTIONS
     process.env.NODE_OPTIONS = '--require /path/that-must-not-reach-the-child'
-    const host = new DesktopHostProcess(process.execPath, project)
+    const host = new DesktopHostProcess(process.execPath, project, join(project, 'harness'))
     try {
       await expect(host.start()).resolves.toMatchObject({ dshVersion: 'clean' })
       const response = await host.fetch(new Request('dsh-app://app/example', { method: 'POST', body: 'request' }))
@@ -124,7 +142,7 @@ function onRequestFrame(frame) {
   responseEnd(frame.streamId)
 }
 `)
-    const host = new DesktopHostProcess(process.execPath, project)
+    const host = new DesktopHostProcess(process.execPath, project, join(project, 'harness'))
     try {
       const response = await host.fetch(new Request('dsh-app://app/large'))
       const body = new Uint8Array(await response.arrayBuffer())
@@ -151,7 +169,7 @@ function onRequestFrame(frame) {
       start(controller) { controller.enqueue(Buffer.from('first')) },
       cancel() { canceled = true },
     })
-    const host = new DesktopHostProcess(process.execPath, project)
+    const host = new DesktopHostProcess(process.execPath, project, join(project, 'harness'))
     try {
       const request = new Request('dsh-app://app/early', {
         method: 'POST',
@@ -184,7 +202,7 @@ function onRequestFrame(frame) {
   }
 }
 `)
-    const host = new DesktopHostProcess(process.execPath, project)
+    const host = new DesktopHostProcess(process.execPath, project, join(project, 'harness'))
     try {
       const canceled = await host.fetch(new Request('dsh-app://app/cancel'))
       await canceled.body?.cancel()
@@ -202,7 +220,7 @@ process.send({ type: 'ready', protocolVersion: 3, dshVersion: 'invalid-frame' })
 function onRequestFrame(frame) {
   if (frame.type === 1) responsePipe.write(Buffer.alloc(13))
 }
-`))
+`), join(tmpdir(), 'dsh-host-test-harness'))
     await invalid.start()
     await expect(invalid.fetch(new Request('dsh-app://app/invalid'))).rejects.toThrow(/invalid Host response frame marker/u)
     await invalid.stop().catch(() => undefined)
@@ -210,7 +228,7 @@ function onRequestFrame(frame) {
     const earlyExit = new DesktopHostProcess(process.execPath, projectWithHost(`
 function onRequestFrame() {}
 process.exit(0)
-`))
+`), join(tmpdir(), 'dsh-host-test-harness'))
     await expect(earlyExit.start()).rejects.toThrow(/response pipe ended/u)
   })
 })

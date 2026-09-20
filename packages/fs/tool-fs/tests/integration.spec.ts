@@ -115,6 +115,22 @@ describe('default deployment (with dsh-fs-observation-policy)', () => {
   })
 
   describe('read', () => {
+    it.each(['md', 'markdown'])('reads Chinese modelling notes, formulas and code from a .%s path', async (extension) => {
+      const file = `数模 题目.${extension}`
+      const lines = ['# 数学建模任务', '', '$$y = ax + b$$', '', '```python', 'print("建模结果")', '```', '', '| 变量 | 数值 |', '| --- | --- |', '| a | 2 |']
+      const content = lines.join('\n')
+      await writeFile(join(dir, file), content, 'utf8')
+      const result = await call('read', { file_path: file })
+      expect(result.isError).toBe(false)
+      for (const [index, line] of lines.entries()) expect(text(result)).toContain(`${String(index + 1)}: ${line}`)
+      const page = await call('read', { file_path: file, offset: 5, limit: 3 })
+      expect(page.isError).toBe(false)
+      expect(text(page)).toContain('5: ```python')
+      expect(text(page)).toContain('6: print("建模结果")')
+      expect(text(page)).toContain('Use offset=8 to continue.')
+      expect(await readFile(join(dir, file), 'utf8')).toBe(content)
+    })
+
     it('returns line-numbered content', async () => {
       await writeFile(join(dir, 'a.txt'), 'alpha\nbeta')
       const result = await call('read', { file_path: 'a.txt' })

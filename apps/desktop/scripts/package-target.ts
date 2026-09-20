@@ -13,12 +13,6 @@ import { desktopTargetBuildPaths } from './desktop-build-paths.mjs'
 const APP_ROOT = resolve(import.meta.dirname, '..')
 const REPOSITORY_ROOT = resolve(APP_ROOT, '..', '..')
 const WINDOWS_SIGNING_ENV_PREFIX = 'DSH_DESKTOP_WINDOWS_'
-const WINDOWS_SIGNING_ENV_NAMES = [
-  'DSH_DESKTOP_WINDOWS_CER_FILE',
-  'DSH_DESKTOP_WINDOWS_KEY_CONTAINER',
-  'DSH_DESKTOP_WINDOWS_SIGNTOOL',
-  'DSH_DESKTOP_WINDOWS_TOKEN_PIN',
-] as const
 const DESKTOP_UPLOAD_CREDENTIAL_ENV_NAMES = new Set([
   'DOWNLOAD_TEST_COS_SECRET_ID',
   'DOWNLOAD_TEST_COS_SECRET_KEY',
@@ -82,6 +76,15 @@ export function withoutDesktopUploadCredentials(environment: NodeJS.ProcessEnv):
     .filter(([name]) => !DESKTOP_UPLOAD_CREDENTIAL_ENV_NAMES.has(name)))
 }
 
+/**
+ * Keep Windows Alpha packaging unsigned and uploads separate from local builds.
+ * @param environment - Target packaging environment.
+ * @returns Environment without Windows signing fields or COS upload credentials.
+ */
+export function desktopElectronBuilderEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return withoutWindowsSigningEnvironment(withoutDesktopUploadCredentials(environment))
+}
+
 function isTargetName(value: string): value is DesktopPackageTargetName {
   return Object.hasOwn(TARGETS, value)
 }
@@ -94,7 +97,13 @@ function packageVersion(path: string, label: string): string {
   return manifest.version
 }
 
-function writeReleaseRecord(
+/**
+ * Write a manual unsigned Windows record or the inherited macOS release record.
+ * @param target - Validated installer target.
+ * @param environment - Packaging environment.
+ * @param artifactsRoot - Existing installer output directory.
+ */
+export function writeReleaseRecord(
   target: DesktopPackageTarget,
   environment: NodeJS.ProcessEnv,
   artifactsRoot: string,
@@ -104,15 +113,18 @@ function writeReleaseRecord(
   if (desktopVersion !== dshVersion) {
     throw new Error(`desktop package: desktop version ${desktopVersion} does not match dsh version ${dshVersion}`)
   }
-  const update = resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch)
+  const update = target.platform === 'win32'
+    ? undefined
+    : resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch)
   const recordPath = join(artifactsRoot, desktopBuildRecordFilename(target.name))
   const temporaryPath = `${recordPath}.tmp`
   writeFileSync(temporaryPath, `${JSON.stringify({
     schemaVersion: 1,
     target: target.name,
     version: dshVersion,
-    environment: update.environment,
-    publicUrl: update.publicUrl,
+    ...(update === undefined
+      ? { installation: 'manual', signed: false }
+      : { environment: update.environment, publicUrl: update.publicUrl }),
   }, null, 2)}\n`)
   renameSync(temporaryPath, recordPath)
 }
@@ -250,10 +262,7 @@ async function main(): Promise<void> {
     DSH_DESKTOP_TARGET_PLATFORM: target.platform,
     DSH_DESKTOP_TARGET_ARCH: target.arch,
   }
-  const electronBuilderEnv = { ...targetEnv }
-  for (const name of WINDOWS_SIGNING_ENV_NAMES) {
-    if (process.env[name] !== undefined) electronBuilderEnv[name] = process.env[name]
-  }
+  const electronBuilderEnv = desktopElectronBuilderEnvironment(targetEnv)
   await runPnpm(['run', 'build:official'], buildEnv, REPOSITORY_ROOT)
   await runPnpm(['run', 'release:pack', '--family', 'dsh', '--out', buildPaths.packedDsh], buildEnv, REPOSITORY_ROOT)
   await runPnpm([

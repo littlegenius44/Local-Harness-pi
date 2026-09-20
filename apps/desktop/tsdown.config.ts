@@ -10,7 +10,7 @@ export default defineConfig([
     fixedExtension: false,
     dts: false,
     clean: false,
-    deps: { neverBundle: ['electron'] },
+    deps: { neverBundle: ['electron'], alwaysBundle: ['@local-harness/product-identity'] },
   },
   {
     // Sandboxed Electron preloads run as CommonJS even though the application package is ESM.

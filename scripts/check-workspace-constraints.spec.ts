@@ -5,9 +5,51 @@ import {
   checkDshFamilyVersion,
   checkExperimentalDependencyIsolation,
   checkExperimentalManifest,
+  checkWorkspaceManifest,
   expectedDshPackageFiles,
   type WorkspaceManifest,
 } from './check-workspace-constraints.ts'
+
+describe('Local-Harness-pi private package policy', () => {
+  const local: WorkspaceManifest = {
+    dir: 'packages/util/product-identity',
+    manifest: {
+      name: '@local-harness/product-identity', version: '0.1.5-alpha.2', private: true,
+      type: 'module', main: 'lib/index.js', types: 'lib/types/index.d.ts',
+      exports: { '.': { types: './lib/types/index.d.ts', default: './lib/index.js' } },
+      files: ['lib/index.js', 'lib/types/**/*.d.ts'],
+    },
+  }
+  it('accepts a private Local package with the ordinary package artifact rules', () => {
+    expect(checkWorkspaceManifest(local)).toEqual([])
+  })
+  it.each([
+    { private: false }, { version: '0.0.0' }, { publishConfig: {} },
+    { files: ['src'] }, { exports: {} }, { type: 'commonjs' },
+  ])('rejects an invalid Local manifest %j', (fields) => {
+    expect(checkWorkspaceManifest({ ...local, manifest: { ...local.manifest, ...fields } })).not.toEqual([])
+  })
+  it('rejects a Local manifest with no private declaration', () => {
+    const manifest = { ...local.manifest }
+    delete manifest.private
+    expect(checkWorkspaceManifest({ ...local, manifest })).not.toEqual([])
+  })
+  it('does not give an unknown scope the private exception', () => {
+    expect(checkWorkspaceManifest({ ...local, manifest: { ...local.manifest, name: '@unknown/private' } }).join('\n')).toContain('release member')
+  })
+  it('preserves the existing public DSH release member policy', () => {
+    const manifest = {
+      ...local.manifest, name: '@deepseek-ai/dsh-example',
+      publishConfig: { access: 'public' },
+      repository: { type: 'git', url: 'git+https://github.com/deepseek-ai/deepseek-harness.git', directory: local.dir },
+      peerDependencies: { '@deepseek-ai/cordis': 'workspace:^' },
+      devDependencies: { '@deepseek-ai/cordis': 'workspace:^' },
+    }
+    delete manifest.private
+    expect(checkWorkspaceManifest({ ...local, manifest })).toEqual([])
+    expect(checkWorkspaceManifest({ ...local, manifest: { ...manifest, private: true } }).join('\n')).toContain('release member')
+  })
+})
 
 const experimental: WorkspaceManifest = {
   dir: 'packages/experimental/prototype',

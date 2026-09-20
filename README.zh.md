@@ -1,84 +1,56 @@
-# DeepSeek Harness
+# Local-Harness-pi
 
-[English](README.md) | 中文
+[English](README.md)
 
-DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
+`Local-Harness-pi` 是一个以 DeepSeek Harness（DSH）为产品平台、以 Pi 为执行内核的本地优先桌面 Coding Agent。
 
-它构建于**一切皆插件**的架构之上，由 [Cordis](https://github.com/cordiverse/cordis) 驱动，其设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512)。
+项目已确认的架构定义是：
 
-文档：[https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)
+> **DSH 产品平台 + Pi 执行内核 + 单一 DSH 会话事实源。**
 
-## 开发者预览
+当前仓库已导入固定的 DSH 源码，正在完成 PR-A 的桌面品牌、独立数据目录与安全基线验收。Pi 执行内核尚未接入；当前代码不代表完整 V1 已交付。实施者应先阅读下列文档，并按来源基线核对上游源码后执行计划。
 
-DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来将出现破坏兼容性的变更。**
-
-运行本项目前，请阅读[安全说明](SAFETY.zh.md)。
+内部 `dsh` 包名、协议和事件名是上游兼容标识，不是第二个产品。来源和许可见 [UPSTREAM.md](UPSTREAM.md)，桌面开发说明见 [桌面 README](apps/desktop/README.zh.md)。
 
 <a id="run"></a>
+## 运行状态
 
-## 运行
-
-### 通过 `npm` 运行
-
-安装 `Node.js`，然后运行：
-
-```sh
-npx @deepseek-ai/dsh web
-```
-
-该命令默认会在 `http://127.0.0.1:3080` 启动 Web UI，本机启动时还会用默认浏览器打开页面。通过 SSH 启动时只打印宿主机 URL，因为本地转发地址由 SSH 客户端或编辑器持有。传入 `--no-open` 可仅运行服务器而不打开浏览器。详见 [Web UI 指南](docs/user/guide/index.zh.md)。
+当前面向开发验收，尚未发布可用的 V1 安装包。Markdown 读取集成测试覆盖中文文件名、公式、代码块、表格与分页；桌面到模型的完整流程仍待后续阶段验证。
 
 <a id="run-from-source"></a>
+## 从源码验证
 
-### 从源码运行
+本次构建使用 Node.js 24.17.0 和仓库固定的 pnpm 11.7.0。安装依赖后，`pnpm run build:official` 构建前后端，`pnpm run build:desktop` 编译桌面程序。Windows 开发版打包入口为 `pnpm run package:desktop:win:x64:dir`；打包和启动验收尚未完成。
 
-如需从仓库源码运行：
+## 文档入口
 
-```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
-pnpm install
-pnpm run build
-pnpm dsh web
-```
+- [总体架构设计](docs/superpowers/specs/2026-09-09-local-harness-pi-v1-design.md)
+- [V1 需求规格](docs/requirements/v1-requirements.md)
+- [接口契约](docs/architecture/interface-contracts.md)
+- [会话一致性与恢复](docs/architecture/session-consistency.md)
 
-`pnpm run build` 会准备仓库产物。`pnpm dsh web` 会直接使用这些已构建产物，不会重新构建。
+## 实施计划
 
-## 社区与支持
+- [V1 主计划与三个 Draft PR 检查点](docs/superpowers/plans/2026-09-10-local-harness-pi-v1-master.md)
+- [PR-A：DSH 源码基线、桌面品牌与安全边界](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-a-dsh-baseline.md)
+- [PR-B：Pi Agent Core 内核桥与单一会话事实源](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-b-pi-kernel.md)
+- [PR-C：OpenAI-compatible 配置与 V1 桌面产品闭环](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-c-product-loop.md)
 
-- 通过 [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions) 提交反馈或 bug 报告。
-- 为你的插件仓库添加 [`dsh-plugin`](https://github.com/topics/dsh-plugin) 话题，便于被发现。
-- 欢迎加入 DeepSeek Harness 企微群：扫码添加企微小助手并填写入群问卷，完成后小助手会邀请你入群。
+## 当前状态
 
-<table>
-  <thead>
-    <tr>
-      <th align="center">企微小助手</th>
-      <th align="center">入群问卷</th>
-      <th align="center">微信公众号</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td align="center"><img src="https://cdn.deepseek.com/harness/readme/community-wecom-assistant.png" alt="DeepSeek Harness 企微小助手二维码" width="180" height="180"></td>
-      <td align="center"><a href="https://trtgsjkv6r.feishu.cn/share/base/form/shrcnIt5twSVdLGD52KJBckGCgg"><img src="https://cdn.deepseek.com/harness/readme/community-wecom-survey.png" alt="DeepSeek Harness 入群问卷二维码" width="180" height="180"></a></td>
-      <td align="center"><img src="https://cdn.deepseek.com/harness/readme/community-wechat-official-account.png" alt="DeepSeek Harness 团队微信公众号二维码" width="180" height="180"></td>
-    </tr>
-  </tbody>
-</table>
+- 架构方向：已确认
+- V1/V1.1 范围：已确认
+- 需求与接口文档：已确认
+- 实施计划：已完成
+- PR-A：源码已导入，完整构建通过，文档与打包验收进行中
+- PR-B / PR-C：尚未开始
 
-## 参与贡献
+## 上游来源基线
 
-参见 [CONTRIBUTING.md](CONTRIBUTING.zh.md)。
+| 项目 | 用途 | 固定版本 |
+|---|---|---|
+| `deepseek-ai/deepseek-harness` | 产品平台和唯一会话事实源 | `b2e3b2a0125854567a4a5fcba75782e42fe84901` |
+| `earendil-works/pi` | 执行内核 | `acaa253cc8e3f159e6100b6f3874861b1f0bfc99` / `0.85.1` |
+| `openai/codex` | 交互、安全与工具入口参考，不作为运行时依赖 | `73a1148c9c775c2a4616ce5096291740a00ed68a` |
 
-## 开发
-
-请先阅读[开发指南](docs/development.zh.md)与[架构文档](docs/architecture.zh.md)。
-
-面向 agent：请遵循 [AGENTS.md](AGENTS.md)。
-
-## 许可证
-
-[MIT](LICENSE)
-
-第三方依赖及其许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+以上固定版本用于保证设计可复现。实施者不得在未记录兼容性差异的情况下静默升级上游版本。

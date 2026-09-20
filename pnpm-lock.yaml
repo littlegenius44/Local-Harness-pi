@@ -488,6 +488,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@local-harness/product-identity':
+        specifier: workspace:*
+        version: link:../../packages/util/product-identity
       electron-updater:
         specifier: ^6.8.9
         version: 6.8.9
@@ -2358,6 +2361,9 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-client-ui-conversation':
+        specifier: workspace:^
+        version: link:../ui-conversation
       '@deepseek-ai/dsh-client-ui-primitives':
         specifier: workspace:^
         version: link:../ui-primitives
@@ -7083,7 +7089,7 @@ importers:
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
       '@earendil-works/pi-ai':
-        specifier: ^0.85.1
+        specifier: 0.85.1
         version: 0.85.1(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
     devDependencies:
       '@deepseek-ai/cordis':
@@ -10350,6 +10356,8 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis
+
+  packages/util/product-identity: {}
 
   packages/util/time:
     devDependencies:

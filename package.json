@@ -17,6 +17,7 @@
     "website"
   ],
   "scripts": {
+    "check:local-harness:sources": "tsx scripts/verify-local-harness-sources.ts",
     "build": "tsx scripts/build.ts",
     "build:bench": "npm run build:native-system && npm run build:lib && tsdown --config benchmarks/tsdown.config.ts",
     "build:official": "tsx scripts/build.ts --profile official",

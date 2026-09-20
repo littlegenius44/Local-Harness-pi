@@ -32,3 +32,15 @@
 - 默认按总体设计的 PR-A、PR-B、PR-C 交付；PR-B 只有过大时才能拆为 B1/B2。
 - 上游版本升级单独提交，不与功能变更混合。
 - 任何触及架构红线、Session schema、持久化所有权或 V1/V1.1 边界的改动，先修改设计文档并取得项目所有者确认。
+
+## Conventions
+
+继承代码约定见[固定 DSH 规则](docs/upstream/dsh-root-agents.md#conventions)，冲突时以本文件为准。
+
+## Run relevant checks locally
+
+验证要求见[固定 DSH 检查规则](docs/upstream/dsh-root-agents.md#run-relevant-checks-locally)及上文编辑与验证要求。
+
+## Commands
+
+上游命令说明见[固定 DSH 命令入口](docs/upstream/dsh-root-agents.md#commands)，实际命令以当前 package.json 为准。

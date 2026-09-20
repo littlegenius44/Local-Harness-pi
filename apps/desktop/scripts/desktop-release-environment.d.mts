@@ -1,3 +1,6 @@
+/** Fixed Local-Harness-pi application identifier. */
+export const DEFAULT_DESKTOP_APP_ID: 'io.localharness.pi'
+
 /** Environment variable that supplies the Electron application identifier. */
 export const DESKTOP_APP_ID_ENV: 'DSH_DESKTOP_APP_ID'
 

@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "DeepSeek Harness",
-  "short_name": "DSH",
+  "name": "Local-Harness-pi",
+  "short_name": "LH-pi",
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",

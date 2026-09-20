@@ -1,41 +1,56 @@
 # Local-Harness-pi
 
-`Local-Harness-pi` 是一个以 DeepSeek Harness（DSH）为产品平台、以 Pi 为执行内核的本地优先桌面 Coding Agent。
+[简体中文](README.zh.md)
 
-项目已确认的架构定义是：
+`Local-Harness-pi` is a local-first desktop Coding Agent designed around DeepSeek Harness (DSH) as its product platform and Pi as its execution kernel.
 
-> **DSH 产品平台 + Pi 执行内核 + 单一 DSH 会话事实源。**
+The confirmed architecture is:
 
-当前仓库只包含已确认的 V1 设计、契约和可执行实施计划，不包含实现代码。后续代码执行者应先阅读下列文档，并按文档中的来源基线重新核对上游源码后再执行计划。
+> **DSH product platform + Pi execution kernel + a single DSH Session source of truth.**
 
-## 文档入口
+The repository contains the pinned DSH source and is completing PR-A acceptance for desktop identity, isolated data storage, and security. The Pi execution kernel is not connected; this code is not a complete V1 release. Contributors must read the documents below and verify the pinned upstream source before executing the plans.
 
-- [总体架构设计](docs/superpowers/specs/2026-09-09-local-harness-pi-v1-design.md)
-- [V1 需求规格](docs/requirements/v1-requirements.md)
-- [接口契约](docs/architecture/interface-contracts.md)
-- [会话一致性与恢复](docs/architecture/session-consistency.md)
+Internal `dsh` package names, protocols, and events preserve upstream compatibility; they do not identify a second product. See [UPSTREAM.md](UPSTREAM.md) for provenance and licenses and the [desktop README](apps/desktop/README.md) for desktop development.
 
-## 实施计划
+<a id="run"></a>
+## Run status
 
-- [V1 主计划与三个 Draft PR 检查点](docs/superpowers/plans/2026-09-10-local-harness-pi-v1-master.md)
-- [PR-A：DSH 源码基线、桌面品牌与安全边界](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-a-dsh-baseline.md)
-- [PR-B：Pi Agent Core 内核桥与单一会话事实源](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-b-pi-kernel.md)
-- [PR-C：OpenAI-compatible 配置与 V1 桌面产品闭环](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-c-product-loop.md)
+This checkout is under development acceptance. No usable V1 installer has been released. Markdown integration tests cover Chinese filenames, formulas, code blocks, tables, and pagination; the complete desktop-to-model workflow awaits later stages.
 
-## 当前状态
+<a id="run-from-source"></a>
+## Verify from source
 
-- 架构方向：已确认
-- V1/V1.1 范围：已确认
-- 需求与接口文档：已确认
-- 实施计划：已完成
-- 实现代码：尚未开始
+The completed build used Node.js 24.17.0 and the repository-pinned pnpm 11.7.0. After installing dependencies, `pnpm run build:official` builds the frontend and backend, and `pnpm run build:desktop` compiles the desktop shell. The Windows development packaging entry is `pnpm run package:desktop:win:x64:dir`; packaging and launch acceptance remain incomplete.
 
-## 上游来源基线
+## Documents
 
-| 项目 | 用途 | 固定版本 |
+- [Overall architecture](docs/superpowers/specs/2026-09-09-local-harness-pi-v1-design.md)
+- [V1 requirements](docs/requirements/v1-requirements.md)
+- [Interface contracts](docs/architecture/interface-contracts.md)
+- [Session consistency and recovery](docs/architecture/session-consistency.md)
+
+## Implementation plans
+
+- [V1 master plan and three Draft PR checkpoints](docs/superpowers/plans/2026-09-10-local-harness-pi-v1-master.md)
+- [PR-A: DSH baseline, desktop identity, and security](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-a-dsh-baseline.md)
+- [PR-B: Pi Agent Core bridge and single Session source of truth](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-b-pi-kernel.md)
+- [PR-C: OpenAI-compatible configuration and V1 desktop workflow](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-c-product-loop.md)
+
+## Current status
+
+- Architecture: confirmed
+- V1/V1.1 scope: confirmed
+- Requirements and contracts: confirmed
+- Implementation plans: complete
+- PR-A: source imported, complete build passed, documentation and packaging acceptance in progress
+- PR-B / PR-C: not started
+
+## Upstream baseline
+
+| Project | Purpose | Pinned version |
 |---|---|---|
-| `deepseek-ai/deepseek-harness` | 产品平台和唯一会话事实源 | `b2e3b2a0125854567a4a5fcba75782e42fe84901` |
-| `earendil-works/pi` | 执行内核 | `acaa253cc8e3f159e6100b6f3874861b1f0bfc99` / `0.85.1` |
-| `openai/codex` | 交互、安全与工具入口参考，不作为运行时依赖 | `73a1148c9c775c2a4616ce5096291740a00ed68a` |
+| `deepseek-ai/deepseek-harness` | Product platform and single Session source of truth | `b2e3b2a0125854567a4a5fcba75782e42fe84901` |
+| `earendil-works/pi` | Execution kernel | `acaa253cc8e3f159e6100b6f3874861b1f0bfc99` / `0.85.1` |
+| `openai/codex` | Interaction, security, and tool-entry design reference; no runtime dependency | `73a1148c9c775c2a4616ce5096291740a00ed68a` |
 
-以上固定版本用于保证设计可复现。实施者不得在未记录兼容性差异的情况下静默升级上游版本。
+These pins make the design reproducible. Contributors must not silently upgrade upstream versions without recording compatibility differences.

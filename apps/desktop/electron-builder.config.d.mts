@@ -1,13 +1,14 @@
 /** Electron-builder fields asserted by the Desktop release tests. */
 export interface DesktopElectronBuilderConfig {
   readonly appId: string
+  readonly productName: string
+  readonly artifactName: string
+  readonly win: { readonly forceCodeSigning: boolean; readonly signExecutable: boolean; readonly icon: string; readonly target: readonly string[] }
+  readonly nsis: { readonly oneClick: boolean; readonly allowToChangeInstallationDirectory: boolean }
   readonly directories: {
     readonly output: string
   }
-  readonly extraResources: readonly [
-    { readonly from: string, readonly to: 'runtime' },
-    { readonly from: string, readonly to: 'seed' },
-  ]
+  readonly extraResources: readonly { readonly from: string; readonly to: string }[]
   readonly mac: {
     readonly identity: string | undefined
     readonly forceCodeSigning: boolean
@@ -18,7 +19,6 @@ export interface DesktopElectronBuilderConfig {
     readonly writeUpdateInfo: boolean
   }
   readonly artifactBuildCompleted: (artifact: { readonly file: string }) => Promise<void> | undefined
-  readonly publish: readonly [{ readonly provider: 'generic', readonly url: string }]
 }
 
 /**

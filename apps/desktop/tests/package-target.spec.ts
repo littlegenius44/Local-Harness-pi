@@ -1,13 +1,58 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, onTestFinished } from 'vitest'
+import { existsSync, mkdtempSync, readFileSync, rmdirSync, unlinkSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
+  desktopElectronBuilderEnvironment,
   desktopElectronBuilderArguments,
   parseDesktopPackageInvocation,
   resolveDesktopPackageTarget,
   withoutDesktopUploadCredentials,
   withoutWindowsSigningEnvironment,
+  writeReleaseRecord,
 } from '../scripts/package-target.ts'
 
 describe('desktop package target', () => {
+  it.each([
+    {},
+    { DSH_DESKTOP_AUTO_UPDATE_ENV: 'production' },
+    { DSH_DESKTOP_AUTO_UPDATE_ENV: 'invalid' },
+  ])('records a manual unsigned Windows installer independently of upstream update configuration %j', (environment) => {
+    const artifacts = mkdtempSync(join(tmpdir(), 'local-harness-package-'))
+    const recordPath = join(artifacts, 'win-x64-release.json')
+    onTestFinished(() => {
+      if (existsSync(recordPath)) unlinkSync(recordPath)
+      if (existsSync(`${recordPath}.tmp`)) unlinkSync(`${recordPath}.tmp`)
+      rmdirSync(artifacts)
+    })
+    const target = resolveDesktopPackageTarget('win-x64', 'win32', 'x64')
+    writeReleaseRecord(target, environment, artifacts)
+    const record: unknown = JSON.parse(readFileSync(recordPath, 'utf8'))
+    const manifest = JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')) as { version: string }
+    expect(record).toEqual({
+      schemaVersion: 1,
+      target: 'win-x64',
+      version: manifest.version,
+      installation: 'manual',
+      signed: false,
+    })
+  })
+
+  it('does not forward Windows signing or COS secrets to electron-builder', () => {
+    expect(desktopElectronBuilderEnvironment({
+      PATH: 'tools',
+      DSH_DESKTOP_TARGET_PLATFORM: 'win32',
+      DSH_DESKTOP_TARGET_ARCH: 'x64',
+      DSH_DESKTOP_WINDOWS_TOKEN_PIN: 'token-secret',
+      DSH_DESKTOP_WINDOWS_CER_FILE: 'certificate',
+      DOWNLOAD_PROD_COS_SECRET_KEY: 'upload-secret',
+    })).toEqual({
+      PATH: 'tools',
+      DSH_DESKTOP_TARGET_PLATFORM: 'win32',
+      DSH_DESKTOP_TARGET_ARCH: 'x64',
+    })
+  })
+
   it('selects matching runtime and electron-builder architectures', () => {
     expect(resolveDesktopPackageTarget('mac-arm64', 'darwin', 'arm64')).toMatchObject({
       platform: 'darwin', arch: 'arm64', builderPlatform: '--mac', builderArch: '--arm64',

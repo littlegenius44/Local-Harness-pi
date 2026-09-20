@@ -10,6 +10,17 @@ describe('desktop locale dictionaries', () => {
     expect(resolveDesktopLocale('fr-FR')).toEqual({ id: 'en', messages: en })
   })
 
+  it('localizes offline About and license recovery actions', () => {
+    expect(en.aboutMenu).toBe('About Local-Harness-pi')
+    expect(zh.aboutMenu).toBe('关于 Local-Harness-pi')
+    expect(en.thirdPartyNoticesMenu).toBe('Third-party Licenses')
+    expect(zh.thirdPartyNoticesMenu).toBe('第三方许可')
+    for (const messages of [en, zh]) {
+      expect(formatDesktopMessage(messages.noticesOpenFailedDetail, { path: '/offline/notices.txt', error: 'test-error' })).toContain('/offline/notices.txt')
+      expect(formatDesktopMessage(messages.noticesOpenFailedDetail, { path: '/offline/notices.txt', error: 'test-error' })).toContain('test-error')
+    }
+  })
+
   it('formats named values without consuming unknown placeholders', () => {
     expect(formatDesktopMessage('{name}@{version} {missing}', { name: 'plugin', version: '1.2.3' }))
       .toBe('plugin@1.2.3 {missing}')

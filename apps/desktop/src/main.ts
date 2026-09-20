@@ -10,9 +10,12 @@ import {
   ipcMain,
   Menu,
   protocol,
+  shell,
   type IpcMainInvokeEvent,
 } from 'electron'
 import { resolveDesktopPaths } from './paths.ts'
+import { desktopWindowOptions } from './window-options.ts'
+import { buildAboutDetail, resolveThirdPartyNoticesPath } from './about.ts'
 import { DesktopProjectManager, type DesktopProjectHooks } from './project-manager.ts'
 import { DesktopHostProcess } from './host-process.ts'
 import { DESKTOP_IPC, type DesktopUpdateState } from './ipc.ts'
@@ -80,20 +83,7 @@ function developmentHostInspectPort(enabled: boolean): number | undefined {
 }
 
 function createWindow(preload: string): BrowserWindow {
-  const window = new BrowserWindow({
-    width: 1280,
-    height: 840,
-    minWidth: 880,
-    minHeight: 600,
-    show: false,
-    webPreferences: {
-      preload,
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: true,
-      webSecurity: true,
-    },
-  })
+  const window = new BrowserWindow(desktopWindowOptions(preload))
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', (event, url) => {
     if (new URL(url).protocol !== `${SCHEME}:`) event.preventDefault()
@@ -132,7 +122,8 @@ async function serveShellAsset(request: Request): Promise<Response> {
 
 async function main(): Promise<void> {
   const resources = runtimeResources()
-  const paths = resolveDesktopPaths()
+  const harnessHome = join(app.getPath('userData'), 'harness')
+  const paths = resolveDesktopPaths(harnessHome)
   const development = developmentProject()
   const activeProject = development ?? paths.profile
   const hostInspectPort = developmentHostInspectPort(development !== undefined)
@@ -145,6 +136,29 @@ async function main(): Promise<void> {
   let updateState: DesktopUpdateState = { phase: 'idle' }
   const locale = resolveDesktopLocale(app.getLocale())
   const messages = locale.messages
+  const openNotices = async (): Promise<void> => {
+    const path = resolveThirdPartyNoticesPath(app.isPackaged, process.resourcesPath, app.getAppPath())
+    const error = await shell.openPath(path)
+    if (error !== '') {
+      await dialog.showMessageBox({
+        type: 'error',
+        title: messages.noticesOpenFailedTitle,
+        message: formatDesktopMessage(messages.noticesOpenFailedDetail, { path, error }),
+      })
+    }
+  }
+  const showAbout = async (): Promise<void> => {
+    const result = await dialog.showMessageBox({
+      type: 'info',
+      title: messages.aboutMenu,
+      message: messages.aboutMenu,
+      detail: buildAboutDetail(app.getVersion()),
+      buttons: [messages.close, messages.thirdPartyNoticesMenu],
+      defaultId: 0,
+      cancelId: 0,
+    })
+    if (result.response === 1) await openNotices()
+  }
   const appPreload = fileURLToPath(new URL('./preload-app.cjs', import.meta.url))
   const managementPreload = fileURLToPath(new URL('./preload.cjs', import.meta.url))
 
@@ -157,7 +171,7 @@ async function main(): Promise<void> {
   }
 
   const startHost = async (projectDir = activeProject): Promise<DesktopHostProcess> => {
-    const next = new DesktopHostProcess(resources.node, projectDir, hostInspectPort)
+    const next = new DesktopHostProcess(resources.node, projectDir, harnessHome, hostInspectPort)
     await next.start()
     return next
   }
@@ -337,6 +351,12 @@ async function main(): Promise<void> {
       { label: messages.checkUpdatesMenu, click: () => { void checkAndPrompt(true) } },
       { type: 'separator' },
       { role: 'quit' },
+    ],
+  }, {
+    role: 'help',
+    submenu: [
+      { label: messages.aboutMenu, click: () => { void showAbout() } },
+      { label: messages.thirdPartyNoticesMenu, click: () => { void openNotices() } },
     ],
   }]))
 
