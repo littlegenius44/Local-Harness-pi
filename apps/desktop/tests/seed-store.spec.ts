@@ -63,6 +63,21 @@ describe('desktop seed store cleanup', () => {
 })
 
 describe('desktop seed store merge', () => {
+  it('copies unindexed stores and ordinary index.db files without treating them as SQLite indexes', () => {
+    const root = temporaryRoot()
+    const source = join(root, 'source')
+    const destination = join(root, 'destination')
+    mkdirSync(join(source, 'v10', 'files'), { recursive: true })
+    mkdirSync(join(source, 'metadata'), { recursive: true })
+    writeFileSync(join(source, 'v10', 'files', 'index.db'), 'ordinary nested file')
+    writeFileSync(join(source, 'metadata', 'index.db'), 'ordinary metadata')
+    writeFileSync(join(source, 'store-version'), 'fixture')
+    mergePnpmStore(source, destination)
+    expect(readFileSync(join(destination, 'v10', 'files', 'index.db'), 'utf8')).toBe('ordinary nested file')
+    expect(readFileSync(join(destination, 'metadata', 'index.db'), 'utf8')).toBe('ordinary metadata')
+    expect(readFileSync(join(destination, 'store-version'), 'utf8')).toBe('fixture')
+  })
+
   it('preserves installed package records while the verified seed replaces matching records and files', { timeout: 30_000 }, () => {
     const root = temporaryRoot()
     const source = join(root, 'source')
@@ -82,6 +97,7 @@ describe('desktop seed store merge', () => {
       database.close()
     }
     writeFileSync(join(source, 'v11', 'files', 'shared'), 'new')
+    writeFileSync(join(source, 'v11', 'files', 'index.db'), 'not a database')
     writeFileSync(join(destination, 'v11', 'files', 'shared'), 'old')
     writeFileSync(join(destination, 'v11', 'files', 'plugin'), 'plugin')
 
@@ -100,6 +116,7 @@ describe('desktop seed store merge', () => {
     ])
     expect(readFileSync(join(destination, 'v11', 'files', 'shared'), 'utf8')).toBe('new')
     expect(readFileSync(join(destination, 'v11', 'files', 'plugin'), 'utf8')).toBe('plugin')
+    expect(readFileSync(join(destination, 'v11', 'files', 'index.db'), 'utf8')).toBe('not a database')
   })
 })
 

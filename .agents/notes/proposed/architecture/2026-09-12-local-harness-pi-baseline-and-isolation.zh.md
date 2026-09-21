@@ -20,6 +20,12 @@ PR-A 已有导入基线、身份、许可声明和桌面隔离的源码变更。
 
 继承的 [Electron 打包记录](../../implemented/architecture/2026-08-25-electron-desktop-packaging-and-updates.zh.md) 仍保留 DSH 基线的 seed 与进程设计依据。本提案仅改变派生产品的数据归属与 Windows 发布策略，不取代完整上游机制，也不授权使用上游发布基础设施。
 
+## 构造与启动约束
+
+[machine 整改计划](../../../../docs/superpowers/plans/2026-09-18-agent-machine-seam-rectification.zh.md) 要求 DSH 父类工厂保留写权限、恢复、发布与销毁的所有权。protected 构造 hook 默认创建 `ReactLoopAgent`；注入的 machine 暴露相同的 Agent 契约与真实 Scope。这不代表 Pi 已启用。
+
+桌面 seed 内容复制通过单独枚举各版本根目录，将 SQLite 索引排除在批量复制之外。内容目录使用无过滤函数的递归复制；内容复制后再合并索引，保留已安装插件的记录。内容与索引的所有权不变。启动性能改善必须由产物启动证据确认；仅复制测试通过不足以验收安装包。
+
 ## 已考虑的替代方案
 
 **重命名全部 DSH 标识。** 已批准计划保留内部兼容标识，因为大范围重命名会引入无关工作，而不会改善产品隔离。

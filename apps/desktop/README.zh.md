@@ -44,6 +44,8 @@ Windows Alpha 打包不签名，采用手动安装。默认应用 ID 是 `io.loc
 
 主渲染器接收协议标记，管理渲染器接收受限的插件与更新操作。[窗口选项](src/window-options.ts)、发送方检查及 [main.ts](src/main.ts) 中的导航限制定义 Electron 约束。DSH 协议、npm scope 和 preload 标识保留为兼容标识。
 
+seed store 合并时不对内容目录使用 JavaScript 文件过滤函数，并单独合并各版本的 SQLite 包索引。已有插件记录得到保留；已验证的 seed 记录和文件覆盖匹配项。[seed-store.ts](src/seed-store.ts) 负责该操作。
+
 更新器要求应用已打包且存在 `app-update.yml`。Windows Alpha 不配置该更新渠道。[update-coordinator.ts](src/update-coordinator.ts) 管理这一条件；签名自动更新不属于 V1。
 
 关于信息与打包的 `THIRD_PARTY_NOTICES.txt` 标明 DSH 和 Pi 来源，并声明 Local-Harness-pi 不是 OpenAI 或 DeepSeek 官方产品。Codex 仅作为设计参考。[产品身份](../../packages/util/product-identity/README.zh.md) 与 [上游来源](../../UPSTREAM.md) 管理来源数据。

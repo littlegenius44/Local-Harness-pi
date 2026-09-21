@@ -44,6 +44,8 @@ The packaged shell uses a bundled upstream Node.js child and bundled pnpm. The o
 
 The main renderer receives a protocol marker; the management renderer receives constrained plugin and update operations. [Window options](src/window-options.ts), sender checks, and navigation restrictions in [main.ts](src/main.ts) define the Electron restrictions. The DSH protocol, npm scopes, and preload identifiers remain compatibility identifiers.
 
+The seed store merge copies content directories without a JavaScript file filter and merges each version's SQLite package index separately. Existing plugin records survive; verified seed records and files replace matching entries. [seed-store.ts](src/seed-store.ts) owns this operation.
+
 The updater requires a packaged application with `app-update.yml`. Windows Alpha does not configure that update channel. [update-coordinator.ts](src/update-coordinator.ts) owns this condition; signed automatic updates are outside V1.
 
 About information and the packaged `THIRD_PARTY_NOTICES.txt` identify DSH and Pi and state that Local-Harness-pi is not an official OpenAI or DeepSeek product. Codex is a design reference only. [Product identity](../../packages/util/product-identity/README.md) and [upstream provenance](../../UPSTREAM.md) own the attribution data.

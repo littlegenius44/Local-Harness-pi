@@ -20,6 +20,12 @@ PR-A has source changes for the imported baseline, identity, notices, and deskto
 
 The inherited [Electron packaging note](../../implemented/architecture/2026-08-25-electron-desktop-packaging-and-updates.md) remains the DSH baseline rationale for its seed and process design. This proposal changes only the fork's data ownership and Windows release policy; it does not supersede the full upstream mechanism or authorize upstream release infrastructure.
 
+## Construction and startup constraints
+
+The [machine rectification plan](../../../../docs/superpowers/plans/2026-09-18-agent-machine-seam-rectification.md) requires the parent DSH factory to retain write ownership, recovery, publication, and teardown. Its protected construction hook defaults to `ReactLoopAgent`; injected machines expose the same Agent contract and a real Scope. This does not activate Pi.
+
+Desktop seed content copies exclude version-root SQLite indexes from bulk copying by enumerating those roots separately. Content directories use unfiltered recursive copies; indexes merge after content copying, preserving installed plugin records. The content and index ownership remain unchanged. Artifact launch evidence must establish any startup improvement; passing copy tests alone does not qualify an installer.
+
 ## Alternatives considered
 
 **Rename all DSH identifiers.** The approved plan retains internal compatibility identifiers because a broad rename creates unrelated work without improving product separation.

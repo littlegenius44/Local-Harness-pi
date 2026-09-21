@@ -154,12 +154,22 @@ export function mergePnpmStore(source: string, destination: string): void {
     .filter(entry => entry.isDirectory() && STORE_VERSION_PATTERN.test(entry.name)
       && existsSync(join(source, entry.name, 'index.db')))
     .map(entry => `${entry.name}/index.db`)
-  const indexes = new Set(indexPaths)
-  cpSync(source, destination, {
-    recursive: true,
-    force: true,
-    filter: path => !indexes.has(relative(source, path).split(sep).join('/')),
-  })
+  const indexedVersions = new Set(indexPaths.map(path => path.split('/')[0]))
+  for (const entry of readdirSync(source, { withFileTypes: true })) {
+    const from = join(source, entry.name)
+    const to = join(destination, entry.name)
+    if (!indexedVersions.has(entry.name)) {
+      cpSync(from, to, { recursive: true, force: true })
+      continue
+    }
+    mkdirSync(to, { recursive: true, mode: 0o700 })
+    // Keep SQLite indexes out of bulk copies. Omitting a JS filter lets Node
+    // copy the content directories through its native recursive implementation.
+    for (const child of readdirSync(from)) {
+      if (child === 'index.db') continue
+      cpSync(join(from, child), join(to, child), { recursive: true, force: true })
+    }
+  }
   for (const path of indexPaths) {
     mergeStoreIndex(join(source, ...path.split('/')), join(destination, ...path.split('/')))
   }
