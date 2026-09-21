@@ -17,6 +17,8 @@ Electron 应用显示带有 Local-Harness-pi 品牌的 DSH Web UI，并将桌面
 <a id="data-ownership"></a>
 ## 数据归属
 
+应用清单声明 `productName: Local-Harness-pi`，Electron 据此选择运行时名称与默认用户数据目录。Windows 默认目录为 `%APPDATA%\Local-Harness-pi`；内部 npm 包名仍是上游兼容标识。
+
 桌面 Host 的 `DSH_HOME` 由 Electron 指定为 `join(app.getPath('userData'), 'harness')`。继承自 shell 的 `DSH_HOME` 不会决定桌面数据根目录。因此，会话、设置、凭据和工作区状态使用桌面应用目录，而不是 CLI 的默认 home。[main.ts](src/main.ts) 与 [host-process.ts](src/host-process.ts) 管理这一选择及子进程环境。
 
 在该 home 下，Electron 管理 `profiles/desktop`、桌面 pnpm store、staging 目录、激活日志和回滚 profile。它在访问 profile 前获取单实例锁。包变更先安装到 staging，再执行后端健康检查，然后激活；[project-manager.ts](src/project-manager.ts) 管理中断后的恢复。

@@ -33,8 +33,9 @@ describe('Local-Harness-pi desktop identity', () => {
     expect(resolveThirdPartyNoticesPath(true, '/resources', '/app')).toBe(resolve('/resources/THIRD_PARTY_NOTICES.txt'))
     expect(resolveThirdPartyNoticesPath(false, '/resources', '/app')).toBe(resolve('/app/resources/THIRD_PARTY_NOTICES.txt'))
     expect(readFileSync(resolve(root, 'resources/THIRD_PARTY_NOTICES.txt'))).toEqual(Buffer.from(thirdPartyNotices, 'utf8'))
-    const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as { version: string }
+    const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as { version: string; productName?: string }
     expect(manifest.version).toBe('0.1.5-alpha.2')
+    expect(manifest.productName).toBe('Local-Harness-pi')
   })
   it('ships an original geometric icon without font or external resources', () => {
     const svg = readFileSync(resolve(root, 'build/icon.svg'), 'utf8')

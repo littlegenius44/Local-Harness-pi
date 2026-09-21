@@ -17,6 +17,8 @@ The Electron application displays the DSH Web UI with Local-Harness-pi branding 
 <a id="data-ownership"></a>
 ## Data ownership
 
+The application manifest declares `productName: Local-Harness-pi`, which Electron uses for its runtime name and default user-data directory. On Windows the default is `%APPDATA%\Local-Harness-pi`; the internal npm package name remains an upstream compatibility identifier.
+
 The desktop Host receives `DSH_HOME` from Electron as `join(app.getPath('userData'), 'harness')`. An inherited shell `DSH_HOME` does not select the desktop data root. Sessions, settings, credentials, and workspace state therefore use the desktop application's directory rather than the CLI's default home. [main.ts](src/main.ts) and [host-process.ts](src/host-process.ts) own this selection and child environment.
 
 Under that home, Electron owns `profiles/desktop`, the desktop pnpm store, staging directories, activation journal, and rollback profile. It takes a single-instance lock before accessing the profile. Package changes install into staging and run a backend health check before activation; [project-manager.ts](src/project-manager.ts) owns recovery after interruption.

@@ -1,5 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-desktop",
+  "productName": "Local-Harness-pi",
   "description": "Electron desktop shell for an isolated pnpm-installed dsh runtime",
   "version": "0.1.5-alpha.2",
   "private": true,
