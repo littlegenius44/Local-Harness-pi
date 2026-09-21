@@ -1,56 +1,58 @@
-# Local-Harness-pi 会话一致性与恢复规范
+# Local-Harness-pi Session Consistency and Recovery Specification
 
-文档版本：1.1
+English | [中文](session-consistency.zh.md)
 
-适用版本：V1
+Document version: 1.1
 
-最高原则：只有 DSH Session log 是会话事实源
+Applicable release: V1
 
-## 1. 要解决的问题
+Highest principle: the DSH Session log is the only source of session truth
 
-本项目明确避免“运行记录和展示记录各存一套，某次写入或迁移没有对齐，导致消息丢失、重复、错序或无法恢复”的设计。
+## 1. Problem to solve
 
-因此 V1 不采用双写同步，而是消除第二个权威写入点：
+This project explicitly avoids storing separate execution and display records, where a misaligned write or migration can cause lost, duplicated, out-of-order, or unrecoverable messages.
 
-- DSH append-only Session log：权威、可恢复。
-- DSH SQLite FTS：派生、可丢弃、可重建。
-- Pi Agent state：当前进程的运行缓存，可丢弃。
-- 前端 store：当前页面的显示投影，可丢弃。
-- 诊断日志/telemetry：观察数据，不可用于恢复。
+V1 therefore eliminates the second authoritative writer instead of synchronizing dual writes:
 
-任何恢复后会改变模型输入、工具结果、Goal/Plan、权限结果或用户队列的事实，必须先存在于 DSH Session。
+- DSH append-only Session log: authoritative and recoverable.
+- DSH SQLite FTS: derived, disposable, and rebuildable.
+- Pi Agent state: disposable runtime cache for the current process.
+- Frontend store: disposable display projection for the current page.
+- Diagnostic logs/telemetry: observations that cannot be used for recovery.
 
-## 2. 权威数据分类
+Any fact that changes model input, tool results, Goal/Plan, permission results, or the user queue after recovery must first exist in DSH Session.
 
-### 2.1 必须写入 DSH Session
+## 2. Authoritative data categories
 
-- Session header、workspace/cwd、父子 lineage、创建时间和来源。
-- request header/context 及模型 route/model/推理配置的可恢复描述。
-- System、User、Assistant、Tool Result 消息。
+### 2.1 Data that must be written to DSH Session
+
+- Session header, workspace/cwd, parent-child lineage, creation time, and origin.
+- Request header/context and a recoverable description of model route/model/reasoning configuration.
+- System, User, Assistant, and Tool Result messages.
 - turn/start、turn/end、step/start、step/end。
-- tool/call、tool/result 及 call/result 关联。
-- Agent Inbox splice，包括 pending、claim、cancel 所需投影事实。
-- Goal 变更。
-- Plan 模式变更。
-- Compaction/replace surface 事件。
-- 恢复时追加的 synthetic closer。
+- tool/call, tool/result, and call/result associations.
+- Agent Inbox splices, including the projection facts required for pending, claim, and cancel.
+- Goal changes.
+- Plan mode changes.
+- Compaction/replace surface events.
+- Synthetic closers appended during recovery.
 
-### 2.2 不写入 DSH Session 正文
+### 2.2 Data excluded from DSH Session content
 
-- assistant 每个字符/token 的 UI frame；只在最终 assistant event 的 embedded stream 需要时按 DSH 原格式保存。
-- tool progress 的高频临时帧。
-- spinner、展开/折叠、面板尺寸等 UI 偏好。
-- SQLite FTS token/排名/snippet。
+- Per-character/token assistant UI frames; preserve them in the original DSH format only when required by the final assistant event's embedded stream.
+- High-frequency transient tool progress frames.
+- UI preferences such as spinners, expanded/collapsed state, and panel sizes.
+- SQLite FTS tokens/rankings/snippets.
 - Pi pendingToolCalls、isStreaming、listener、AbortController。
-- API key、Authorization header 或附件原始字节。
+- API keys, Authorization headers, or raw attachment bytes.
 
-### 2.3 附件
+### 2.3 Attachments
 
-附件字节由 DSH Attachment Store 持久化，Session 保存不可变引用、类型和必要元数据。Session 引用是权威关系，Attachment Store 是该引用的专用内容存储，不构成第二份对话记录。
+DSH Attachment Store persists attachment bytes. Session stores immutable references, types, and required metadata. A Session reference is the authoritative relationship; Attachment Store is dedicated content storage for that reference, not a second conversation record.
 
-## 3. 存储位置
+## 3. Storage locations
 
-实际路径必须从 Electron `app.getPath('userData')` 和 DSH path service 推导，不能依赖进程 cwd。逻辑布局：
+Actual paths must derive from Electron `app.getPath('userData')` and the DSH path service, not the process cwd. Logical layout:
 
 ```text
 <userData>/harness/         Electron 为 Host 设置的 DSH_HOME
@@ -60,189 +62,189 @@
   settings/                DSH 设置与凭据引用
 ```
 
-实现应沿用 DSH 项目/会话目录编码，确保 cwd 可读、sessionId 单路径段安全且无碰撞。文件名和具体目录可以沿上游变化，但三类存储不得混在同一个数据库文件。
+The implementation should retain DSH project/session directory encoding so cwd remains readable and sessionId is safe as a single path segment without collisions. Filenames and specific directories may follow upstream changes, but the three storage categories must not share one database file.
 
-## 4. 物理格式
+## 4. Physical format
 
-V1 默认使用 DSH `session-persistence-jsonl` 的 Zstandard 模式：
+V1 uses the Zstandard mode of DSH `session-persistence-jsonl` by default:
 
-- 每个会话一个目录。
-- 每个格式 generation 一个不可变历史文件。
-- 当前 generation 首 frame 为 header。
-- 后续每个 durable append batch 为独立、有 checksum 的 Zstd frame。
-- `compression='none'` 仅用于诊断或新建专用 root，不在同一 root 混用。
+- One directory per session.
+- One immutable historical file per format generation.
+- The first frame in the current generation is the header.
+- Each subsequent durable append batch is a separate Zstd frame with a checksum.
+- `compression='none'` is only for diagnostics or a new dedicated root; compression modes are not mixed within one root.
 
-已发布旧 generation 不原位重写。迁移创建更高版本 successor，来源保持字节不变。
+Published older generations are not rewritten in place. Migration creates a higher-version successor and leaves the source bytes unchanged.
 
-## 5. 核心不变量
+## 5. Core invariants
 
-### INV-S01 单一身份
+### INV-S01 Single identity
 
-活动 Agent 的 `agent.id` 必须等于 `agent.session.id`。UI route、approval、tool call 和 runtime event 都必须携带同一 sessionId。
+An active Agent's `agent.id` must equal `agent.session.id`. UI routes, approvals, tool calls, and runtime events must all carry the same sessionId.
 
-### INV-S02 单写者
+### INV-S02 Single writer
 
-同一 session 在一个 backend 实例、一个进程和跨进程层面最多一个 write handle。竞争者必须收到 `SESSION_WRITE_CONFLICT`。
+A session has at most one write handle within a backend instance, within a process, and across processes. Contenders must receive `SESSION_WRITE_CONFLICT`.
 
-### INV-S03 只追加
+### INV-S03 Append only
 
-已提交 event 不原位修改、不删除、不复用 seq。需要纠正时追加新事件或通过受支持的 generation migration。
+Committed events are never modified in place or deleted, and their seq values are never reused. Corrections append new events or use a supported generation migration.
 
-### INV-S04 连续序列
+### INV-S04 Continuous sequence
 
-逻辑 event seq 连续且单调。Client 发现 seq 缺口时重载 snapshot，禁止自行插入占位事件填缝。
+Logical event seq values are continuous and monotonic. A Client that detects a seq gap reloads the snapshot; it must not insert placeholder events to fill the gap.
 
-### INV-S05 边界平衡
+### INV-S05 Balanced boundaries
 
-稳定会话前缀中的 turn/step 必须满足嵌套顺序：
+Turns/steps in a stable session prefix must follow this nesting order:
 
-- turn/start 后才能 step/start。
-- 同时最多一个开放 step。
-- step/end 必须对应当前开放 step。
-- turn/end 前无开放 step。
-- 新 turn 前上一个 turn 已结束。
+- step/start can occur only after turn/start.
+- At most one step is open at a time.
+- step/end must match the currently open step.
+- No step is open before turn/end.
+- The previous turn has ended before a new turn starts.
 
-物理有效但最后一个 turn 中断时，由恢复流程追加 synthetic closer 后再发布。
+If the physical data is valid but the last turn was interrupted, recovery appends synthetic closers before publishing it.
 
-### INV-S06 工具配对
+### INV-S06 Tool pairing
 
-每个 `tool/result` 必须引用同 step 中唯一 `tool/call` 的 seq；每个已完成 step 中的 `tool/call` 最终必须有一个 result。
+Each `tool/result` must reference the seq of a unique `tool/call` in the same step; each `tool/call` in a completed step must eventually have one result.
 
-### INV-S07 assistant 唯一提交
+### INV-S07 Single assistant commit
 
-一次模型 attempt 最多形成一个 durable `assistant/message`；失败或中断且无可提交消息时形成 `assistant/attempt`。同 attempt 不允许两者都追加为完成结果。
+A model attempt produces at most one durable `assistant/message`; a failed or interrupted attempt without a committable message produces an `assistant/attempt`. Both must not be appended as completion results for the same attempt.
 
-### INV-S08 Inbox 权威
+### INV-S08 Inbox authority
 
-尚未接纳的输入只由 `agent/inbox/spliced` 投影决定。Pi queue 和 UI optimistic item 不得恢复成新输入。
+Only the `agent/inbox/spliced` projection determines inputs that have not yet been accepted. Pi queue entries and optimistic UI items must not be recovered as new inputs.
 
-### INV-S09 配置可解释
+### INV-S09 Explainable configuration
 
-每个模型 step 的 request header/context 必须能够说明 provider、model、工具 surface 和 request series。配置中途变化只从下一个 step 生效。
+Each model step's request header/context must identify its provider, model, tool surface, and request series. Mid-step configuration changes take effect only from the next step.
 
-### INV-S10 派生层不反写
+### INV-S10 Derived layers never write back
 
-SQLite、Pi state 和 UI snapshot 绝不生成或覆盖 DSH Session event。它们只能读 Session 或消费 live notification。
+SQLite, Pi state, and UI snapshots never generate or overwrite DSH Session events. They can only read Session or consume live notifications.
 
-### INV-S11 完成屏障
+### INV-S11 Completion barrier
 
-UI 显示“完成”、Agent 进入 idle 或 Host 返回成功之前，该阶段要求的 Session append 必须已在 DSH Session 内提交，并完成对应的 `flush()` durability barrier。Session append 或 flush 失败时运行必须失败。
+Before the UI displays completion, the Agent enters idle, or Host returns success, the Session appends required for that phase must be committed in DSH Session and complete the corresponding `flush()` durability barrier. A Session append or flush failure must fail the run.
 
-### INV-S12 错误不伪装成功
+### INV-S12 Errors never masquerade as success
 
-corruption、迁移拒绝、写入失败、事件顺序违规和 tool outcome unknown 都必须可见。禁止丢弃错误事件后将 turn 标为 completed。
+Corruption, migration refusal, write failure, event-order violations, and unknown tool outcomes must all be visible. Error events must not be discarded to mark a turn completed.
 
-## 6. Session 写入路径
+## 6. Session write path
 
-正常路径的逻辑顺序：
+Logical order of the normal path:
 
-1. 用户命令以唯一 messageId 追加 Inbox splice。
-2. Agent driver 打开 turn，追加 `turn/start`。
-3. pre-step 接纳消息后追加 `step/start`。
-4. 追加 system 更新和被接纳的 `user/message`。
-5. 追加/更新 request header/context。
-6. 模型流以 runtime frame 提供 UI；完成后追加一个 `assistant/message` 或 `assistant/attempt`。
-7. 对每个工具先追加 `tool/call`，再进入 DSH Tools pipeline。
-8. 结果按 assistant 源顺序追加 `tool/result`。
-9. 追加 `step/end`。
-10. 无更多工具或 steering 时追加 `turn/end`。
-11. 完成 turn durability barrier 后才对外报告完成或 idle。
+1. Append a user command as an Inbox splice with a unique messageId.
+2. The Agent driver opens a turn and appends `turn/start`.
+3. Append `step/start` after pre-step accepts messages.
+4. Append system updates and accepted `user/message` events.
+5. Append/update the request header/context.
+6. Deliver model streaming to the UI through runtime frames; append one `assistant/message` or `assistant/attempt` on completion.
+7. For each tool, append `tool/call` before entering the DSH Tools pipeline.
+8. Append `tool/result` events in assistant source order.
+9. Append `step/end`.
+10. Append `turn/end` when no further tools or steering remain.
+11. Report completion or idle externally only after the turn durability barrier completes.
 
-DSH `Session.append()` 是逻辑提交点：它同步验证事件、分配 seq、更新投影并通知持久化路径。它本身不等于通用 persistence 的抗崩溃保证。AgentHandle 关闭前必须 drain/close write handle，规定的外部承诺点必须显式 `flush()`。
+DSH `Session.append()` is the logical commit point: it synchronously validates events, assigns seq values, updates projections, and notifies the persistence path. It does not by itself provide the crash-resistance guarantee of general persistence. Before AgentHandle closes, it must drain/close the write handle; specified external commitment points must explicitly call `flush()`.
 
-## 7. 运行中状态与 durable 收敛
+## 7. Convergence from runtime state to durable state
 
-### 7.1 Assistant 流
+### 7.1 Assistant stream
 
-Host 为每个流 frame 生成：
+Host generates the following for each stream frame:
 
 - `sessionId`
 - `runId`
-- 单调 `revision`
-- Pi attempt/tool 相关标识
+- Monotonic `revision`
+- Pi attempt/tool identifiers
 
-前端只在内存中展示。最终 `assistant/message` 带 DSH seq 到达后，前端用 durable 投影替换该 frame。
+The frontend displays frames only in memory. When the final `assistant/message` arrives with its DSH seq, the frontend replaces the frame with the durable projection.
 
-如果流中断：
+If the stream is interrupted:
 
-- 有可用 content 时，按 DSH 规则提交 interrupted assistant message。
-- 没有可用 content 时，提交 assistant attempt。
-- 旧 runtime frame 在状态收敛或重连时丢弃。
+- Commit an interrupted assistant message under DSH rules when usable content exists.
+- Commit an assistant attempt when no usable content exists.
+- Discard old runtime frames when state converges or the Client reconnects.
 
 ### 7.2 Tool progress
 
-progress 只用于当前执行 UI。最终 tool/result 是唯一恢复来源。重新打开会话不重放 progress 动画。
+Progress is only for the currently executing UI. The final tool/result is the only recovery source. Reopening a session does not replay progress animations.
 
 ### 7.3 Approval
 
-等待审批是运行态，但审批决定必须通过 DSH 工具策略与对应 callId 关联。应用退出时未决审批不会转移到新 call；恢复后该工具结果按中断规则收敛为 outcome unknown 或 aborted。
+Waiting for approval is runtime state, but approval decisions must be associated with the corresponding callId through DSH tool policy. An approval pending at application exit does not transfer to a new call; after recovery, that tool result converges to outcome unknown or aborted under interruption rules.
 
-## 8. 持久化提交与 fsync
+## 8. Persistence commits and fsync
 
-沿用 DSH backend 语义：
+Retain DSH backend semantics:
 
-- 新 Session 在第一次 append 或显式 flush 前可以不物化。
-- 第一次物化使用 no-overwrite publish，避免同 ID 覆盖。
-- `append()` 成功表示批次被接受、排序并对同 backend 后续读可见，但 backend 可以缓冲物理写入。
-- 只有 `flush()` 成功才承诺此前所有 acknowledged append 抗崩溃。
-- 物理写入或 fsync 失败不得把失败批次伪装为 durable。
-- committed event 永不重写。
-- handle close 必须等待缓冲事件写入和 fsync。
+- A new Session may remain unmaterialized until its first append or explicit flush.
+- Initial materialization uses no-overwrite publication to prevent overwriting the same ID.
+- Successful `append()` means the batch is accepted, ordered, and visible to subsequent reads on the same backend, but the backend may buffer physical writes.
+- Only successful `flush()` guarantees crash resistance for all previously acknowledged appends.
+- Physical write or fsync failure must not present the failed batch as durable.
+- Committed events are never rewritten.
+- Handle close must wait for buffered events to be written and fsynced.
 
-V1 不另加一套 WAL，而是固定使用 DSH persistence flush seam。必须执行三个 durability barrier：
+V1 uses the DSH persistence flush seam and does not add a separate WAL. Three durability barriers are mandatory:
 
-1. **消息确认屏障**：Host 向 Client 返回用户消息“已接纳”前，flush Inbox splice。
-2. **副作用前屏障**：每个 `tool/call` 追加后、工具 body 开始前 flush。这样即使工具产生外部副作用后崩溃，恢复也知道结果未知，而不会误判为未调用。
-3. **Turn 完成屏障**：`turn/end` 追加后、Agent 进入 idle 或成功返回前 flush。
+1. **Message acknowledgement barrier**: flush the Inbox splice before Host returns an accepted acknowledgement for the user message to Client.
+2. **Pre-side-effect barrier**: flush after each `tool/call` append and before its tool body starts. Recovery then knows the outcome is unknown if a crash follows external tool side effects, rather than incorrectly treating the tool as never called.
+3. **Turn completion barrier**: flush after appending `turn/end` and before the Agent enters idle or returns success.
 
-这些屏障优先于性能；后续只能在证明相同安全语义的前提下合并批次，不能删除。
+These barriers take precedence over performance. Later batching may combine them only with proof of equivalent safety semantics; it cannot remove them.
 
-## 9. 崩溃恢复算法
+## 9. Crash recovery algorithm
 
-恢复必须按以下顺序：
+Recovery must follow this order:
 
-1. 解析并验证 sessionId 的存储路径。
-2. 选择数字最高的 canonical generation。
-3. 获取 write ownership；失败则停止。
-4. 扫描 header 和物理 frames。
-5. 对 torn tail 执行物理恢复。
-6. 将历史 generation 迁移为当前逻辑事件，但只在 write open 时发布 successor。
-7. 对逻辑事件运行结构验证。
-8. 计算开放 turn/step 和悬空 tool calls。
-9. 追加 DSH synthetic closers。
-10. 从修复后的事件创建 DSH Session/Projection。
-11. 创建空的 Pi 运行态并从 DSH surface 投影上下文。
-12. 发布 Session、Agent 和 UI snapshot。
+1. Resolve and validate the sessionId storage path.
+2. Select the canonical generation with the highest number.
+3. Acquire write ownership; stop if acquisition fails.
+4. Scan the header and physical frames.
+5. Perform physical recovery of a torn tail.
+6. Migrate historical generations to current logical events, but publish a successor only on write open.
+7. Validate the structure of logical events.
+8. Determine open turns/steps and dangling tool calls.
+9. Append DSH synthetic closers.
+10. Create DSH Session/Projection from repaired events.
+11. Create empty Pi runtime state and project context from the DSH surface.
+12. Publish Session, Agent, and the UI snapshot.
 
-恢复中任一步失败不得发布半配置 Agent。
+A failure at any recovery step must not publish a partially configured Agent.
 
-## 10. 物理尾部处理
+## 10. Physical tail handling
 
-| 情况 | 处理 |
+| Condition | Handling |
 |---|---|
-| raw JSONL 最后一行不完整 | 丢弃该不完整尾行，保留此前完整行 |
-| 最终 Zstd frame 被截断 | 恢复 frame 中完整解码的 JSONL 记录；写 handle 首次追加前截断 torn bytes 并持久重写恢复记录 |
-| 完整 frame checksum 失败 | `SESSION_CORRUPT`，拒绝打开 |
-| 完整 frame 解压失败 | `SESSION_CORRUPT`，拒绝打开 |
-| 完整 JSON 结构不符合格式 | `SESSION_CORRUPT` 或迁移拒绝，不能按普通 torn tail 截断 |
-| 同 root 出现不匹配 compression | 拒绝，不能混合回退 |
-| 存在不支持的未来 generation | `SESSION_MIGRATION_REFUSED`，保留原文件 |
+| Incomplete final raw JSONL line | Discard the incomplete trailing line and retain all preceding complete lines |
+| Truncated final Zstd frame | Recover fully decoded JSONL records in the frame; truncate torn bytes and durably rewrite recovered records before the write handle's first append |
+| Complete frame fails checksum validation | Return `SESSION_CORRUPT` and refuse to open |
+| Complete frame fails decompression | Return `SESSION_CORRUPT` and refuse to open |
+| Complete JSON structure violates the format | Return `SESSION_CORRUPT` or refuse migration; do not truncate it as an ordinary torn tail |
+| Mismatched compression within the same root | Refuse; no mixed-mode fallback |
+| Unsupported future generation exists | Return `SESSION_MIGRATION_REFUSED` and preserve original files |
 
-“尽量打开”不能覆盖完整已提交 frame 的损坏，因为这会让用户误以为历史可靠。
+Best-effort opening must not hide corruption in complete committed frames, because that would mislead the user into trusting the history.
 
-## 11. 语义中断修复
+## 11. Semantic interruption repair
 
-### 11.1 请求尚未形成 durable assistant/tool call
+### 11.1 Request has not produced a durable assistant/tool call
 
-追加必要的 assistant attempt、step/end 和 turn/end(aborted/error)。用户可以手工重试；系统不得伪造 assistant 内容。
+Append the required assistant attempt, step/end, and turn/end(aborted/error). The user can retry manually; the system must not fabricate assistant content.
 
-### 11.2 Tool call 已记录，body 明确未开始
+### 11.2 Tool call recorded, body definitely not started
 
-追加 `tool/result`，错误码 `TOOL_NOT_STARTED` 或上游等价码，说明安全重试可由下一轮模型决定。
+Append `tool/result` with `TOOL_NOT_STARTED` or its upstream equivalent, indicating that the model can decide on a safe retry in the next turn.
 
-### 11.3 Tool body 可能已开始，结果未记录
+### 11.3 Tool body may have started, result not recorded
 
-追加 `tool/result`：
+Append `tool/result`:
 
 ```json
 {
@@ -254,250 +256,250 @@ V1 不另加一套 WAL，而是固定使用 DSH persistence flush seam。必须�
 }
 ```
 
-必须遵守：
+Mandatory behavior:
 
-- 不自动重放。
-- 模型下一轮收到该错误。
-- UI 标记“结果未知”，而不是普通失败。
-- 用户可以检查 diff、文件、命令输出或外部系统后再决定。
+- Do not replay automatically.
+- Deliver the error to the model in the next turn.
+- Mark the UI as outcome unknown rather than an ordinary failure.
+- Let the user inspect diffs, files, command output, or external systems before deciding.
 
-### 11.4 Tool result 已记录，step/end 缺失
+### 11.4 Tool result recorded, step/end missing
 
-只追加 step/end 和 turn/end 修复，不再次执行工具。
+Append only step/end and turn/end repairs; do not execute the tool again.
 
-### 11.5 Assistant 完成但 turn/end 缺失
+### 11.5 Assistant complete, turn/end missing
 
-根据 assistant stop reason 和后续工具配对状态追加正确的 step/turn closer，不能一律标 completed。
+Append the correct step/turn closer according to the assistant stop reason and subsequent tool-pairing state; do not mark every case completed.
 
-## 12. 幂等和重复消息
+## 12. Idempotency and duplicate messages
 
 ### 12.1 User message
 
-`(sessionId, messageId)` 是唯一身份。相同内容和相同 ID 的重试返回已接纳状态；相同 ID 不同内容返回 `PROTOCOL_INVALID_ENVELOPE`。
+`(sessionId, messageId)` is the unique identity. A retry with the same content and ID returns accepted status; the same ID with different content returns `PROTOCOL_INVALID_ENVELOPE`.
 
 ### 12.2 Tool call
 
-`(sessionId, callId)` 在一个 request series 内唯一。相同 callId 再次到达 bridge 是内核不变量错误，不能重新执行。
+`(sessionId, callId)` is unique within a request series. The same callId reaching the bridge again is a kernel invariant error and must not execute again.
 
 ### 12.3 Approval
 
-`(sessionId, callId)` 只消费第一个决定。重复相同决定返回原结果；冲突决定返回 stale/conflict。
+`(sessionId, callId)` consumes only the first decision. An identical repeated decision returns the original result; a conflicting decision returns stale/conflict.
 
 ### 12.4 Client event
 
-- Durable：按 `(sessionId, seq)` 去重。
-- Runtime：按 `(sessionId, runId, revision)` 去重。
+- Durable: deduplicate by `(sessionId, seq)`.
+- Runtime: deduplicate by `(sessionId, runId, revision)`.
 
-Client 不以消息文本、时间戳或数组位置判断重复。
+Client does not identify duplicates by message text, timestamps, or array position.
 
-## 13. 并行工具
+## 13. Parallel tools
 
-Pi 可以并行执行工具，但 Session 事件保持模型源顺序：
+Pi may execute tools in parallel, but Session events retain model source order:
 
-1. 按 assistant content 中的 tool call 顺序分配 `sourceIndex`。
-2. `tool/call` 按 sourceIndex 追加。
-3. 执行结果可以乱序返回并更新 live UI。
-4. durable tool/result 进入 `ToolCommitBuffer`。
-5. 仅当从下一个 sourceIndex 开始连续就绪时批量提交。
-6. step/end 前 buffer 必须为空。
+1. Assign `sourceIndex` in the order of tool calls in assistant content.
+2. Append `tool/call` events in sourceIndex order.
+3. Execution results may arrive out of order and update the live UI.
+4. Durable tool/result events enter `ToolCommitBuffer`.
+5. Commit batches only when a continuous sequence starting at the next sourceIndex is ready.
+6. The buffer must be empty before step/end.
 
-这让重放、模型输入和 UI 在不同机器上保持确定性。
+This keeps replay, model input, and the UI deterministic across machines.
 
-## 14. SQLite 派生索引
+## 14. SQLite derived index
 
-SQLite FTS 只保存从 DSH persisted/live Session 观察得到的搜索文档和 generation/cursor 状态。
+SQLite FTS stores only search documents and generation/cursor state observed from DSH persisted/live Session.
 
-桌面 V1 的正文索引采用 `first-search` 打开策略：启动和普通会话列表不强制打开 SQLite；用户首次提交非空正文查询时，Host 打开或创建索引并开始 reconciliation。产品必须在 `packages/bundle/web-app/cordis.patch.yml` 的 `session-query-sqlite` 覆盖中精确设置 `path: !!js dshHomePath('session-search.db')` 与 `openAt: first-search`；保留 base bundle 的 `openAt: never`，不改变非 Web/desktop profile 的默认行为。该策略不得由 Client localStorage 决定。
+Desktop V1 uses the `first-search` opening policy for content indexing: startup and ordinary session listing do not force SQLite open; when the user first submits a non-empty content query, Host opens or creates the index and starts reconciliation. The product must set exactly `path: !!js dshHomePath('session-search.db')` and `openAt: first-search` in the `session-query-sqlite` override in `packages/bundle/web-app/cordis.patch.yml`; retain `openAt: never` in the base bundle without changing defaults for non-Web/desktop profiles. Client localStorage must not determine this policy.
 
-要求：
+Requirements:
 
-- 使用独立数据库路径。
-- 数据库带应用所有权标记；未知 user table 时拒绝占用。
-- 每条索引记录可追溯到 sessionId、event seq 和 persistence revision。
-- reconciliation 以 Session 为输入，不能以 SQLite 内容纠正 Session。
-- 搜索禁用或索引打不开时，精确会话读取仍可工作。
-- 游标包含 index generation；重建后旧游标失效而不是返回错误页。
+- Use a separate database path.
+- Mark database application ownership; refuse to take over a database containing unknown user tables.
+- Every index record is traceable to sessionId, event seq, and persistence revision.
+- Reconciliation takes Session as input and must not correct Session using SQLite content.
+- Exact session reads still work when search is disabled or the index cannot open.
+- Cursors include the index generation; rebuilding invalidates old cursors instead of returning an incorrect page.
 
-### 14.1 重建触发
+### 14.1 Rebuild triggers
 
-以下情况触发索引重建或新 generation：
+The following conditions trigger an index rebuild or a new generation:
 
-- 数据库不存在。
-- schema/version 不匹配且支持重建。
-- 索引 corruption。
-- persistence revision 与记录不一致。
-- 用户显式选择“重建会话搜索索引”。
+- The database does not exist.
+- Schema/version mismatch with supported rebuilding.
+- Index corruption.
+- Persistence revision differs from the recorded revision.
+- The user explicitly selects rebuild session search index.
 
-重建应先关闭索引 owner，将旧文件移动为带时间戳的单文件备份，再创建新索引。应用确认新索引可用前不自动删除备份。
+Rebuilding should first close the index owner, move the old file to a timestamped single-file backup, then create a new index. The application does not automatically delete the backup before confirming that the new index is usable.
 
-### 14.2 重建期间 UI
+### 14.2 UI during rebuilding
 
-- 会话列表和直接打开仍可用。
-- 全文搜索显示“索引构建中”及进度。
-- 搜索结果只在一个明确 generation 内分页。
-- 重建失败显示错误，但不把会话标为丢失。
+- Session listing and direct opening remain available.
+- Full-text search shows indexing status and progress.
+- Search results paginate within one explicit generation only.
+- A failed rebuild displays an error without marking sessions lost.
 
-## 15. 前端投影和重连
+## 15. Frontend projection and reconnection
 
-重连流程：
+Reconnection flow:
 
-1. Client 请求 `SessionViewSnapshot`。
-2. Host 返回 `generation`、`throughSeq`、events 和 projections。
-3. Client 原子替换 durable state。
-4. Client 丢弃不匹配 sessionId/runId/generation 的 runtime frames。
-5. Client 应用 `seq > throughSeq` 的增量。
-6. 出现 gap、重复内容冲突或投影异常时再次请求 snapshot。
+1. Client requests `SessionViewSnapshot`.
+2. Host returns `generation`, `throughSeq`, events, and projections.
+3. Client atomically replaces durable state.
+4. Client discards runtime frames with mismatched sessionId/runId/generation.
+5. Client applies deltas with `seq > throughSeq`.
+6. A gap, conflicting duplicate content, or a projection anomaly triggers another snapshot request.
 
-前端可以将 panel layout 等 UI 偏好写入 local storage，但以下内容禁止进入 local storage/IndexedDB：
+The frontend may write UI preferences such as panel layout to local storage, but local storage/IndexedDB must not contain:
 
-- 完整 transcript。
+- The complete transcript.
 - pending Inbox。
 - approval truth。
 - Goal/Plan truth。
 - tool result truth。
 - API key。
 
-## 16. Compaction 与 surface replacement
+## 16. Compaction and surface replacement
 
-Compaction 仍由 DSH 负责。其结果通过 DSH Session event 和 surface generation 表达。
+DSH remains responsible for compaction. DSH Session events and surface generations express its result.
 
-允许且必须测试的触发只有三类：DSH 自动上下文压力策略、provider 明确返回 context-window exceeded 后的 DSH request-error 恢复路径、用户 `/compact` 命令。一个 provider 失败最多触发一次压缩后重试；新 surface 仍超限或压缩失败时结束当前 run 并显示稳定错误，不得循环压缩。
+Only three trigger categories are allowed and must be tested: DSH automatic context-pressure policy, the DSH request-error recovery path after an explicit provider context-window-exceeded error, and the user `/compact` command. One provider failure may trigger at most one retry after compaction; if the new surface still exceeds the limit or compaction fails, end the current run with a stable error instead of looping compaction.
 
-Pi 必须：
+Pi must:
 
-- 在每个 step 前读取当前 surface。
-- surface generation 改变时完全替换 Pi context，不将旧数组继续拼接。
-- 保留 DSH request header/series 语义。
-- 不运行 Pi Harness compaction。
+- Read the current surface before each step.
+- Replace Pi context completely when the surface generation changes, rather than continuing to append to the old array.
+- Preserve DSH request header/series semantics.
+- Never run Pi Harness compaction.
 
-Client 必须：
+Client must:
 
-- durable 历史仍按 event log 可审计。
-- 当前模型上下文和简化 UI 按 surface projection 展示。
-- generation 变化时清理旧 transient frame。
+- Keep durable history auditable through the event log.
+- Display current model context and the simplified UI according to the surface projection.
+- Clear old transient frames when the generation changes.
 
-Compaction 提交必须先完整写入新的 DSH surface generation，再使下一 step 可见。失败或进程中断保留旧 generation 为当前有效 surface；恢复只能从完整 DSH compaction/surface event 判定当前 generation。原始 event log 不因压缩被删除、覆盖或改写。
+A compaction commit must fully write the new DSH surface generation before exposing it to the next step. Failure or process interruption leaves the old generation as the current valid surface; recovery can determine the current generation only from complete DSH compaction/surface events. Compaction never deletes, overwrites, or rewrites the original event log.
 
-## 17. Goal、Plan、Skill 与 MCP 的会话关系
+## 17. Session relationships of Goal, Plan, Skill, and MCP
 
-- Goal/Plan 是 Session event，因此可恢复。
-- Skill 源文件和 MCP server 配置不是 Session 正文；Session 记录的是由其产生的模型消息、工具调用和结果。
-- 恢复时先恢复 Session，再装载当前 Agent scope 的 Skill/MCP。
-- 如果历史中使用的 Skill/MCP 当前缺失，会话仍可打开；下一次调用显示 capability unavailable，不能删除历史 tool event。
-- Tool schema 变化会开启新的 request series/header，不篡改旧 header。
+- Goal/Plan are Session events and are therefore recoverable.
+- Skill source files and MCP server configuration are not Session content; Session records the model messages, tool calls, and results they produce.
+- Recovery restores Session before loading Skill/MCP for the current Agent scope.
+- A session still opens if a Skill/MCP used in its history is currently missing; the next call reports capability unavailable, and historical tool events must not be deleted.
+- A tool schema change starts a new request series/header without altering the old header.
 
-## 18. Session 格式迁移
+## 18. Session format migration
 
-迁移要求：
+Migration requirements:
 
-- 只支持 DSH format catalog 中明确列出的相邻迁移链。
-- read open 可以在内存中解码为当前逻辑格式，但不发布 successor。
-- write open 迁移、验证、重新检查源 revision 后，以 no-overwrite 方式发布 successor。
-- 源文件 drift 时拒绝发布并重新准备。
-- 迁移后旧 generation 保留。
-- 不支持降级写回。
-- compression 变更使用新 root，不在迁移中混做。
+- Support only adjacent migration chains explicitly listed in the DSH format catalog.
+- Read open may decode into the current logical format in memory, but does not publish a successor.
+- Write open publishes a successor without overwriting after migration, validation, and rechecking the source revision.
+- Source-file drift rejects publication and requires preparation again.
+- Retain older generations after migration.
+- Downgrade writes are unsupported.
+- Compression changes use a new root and are not combined with migration.
 
-Local-Harness-pi 新增的 kernel 事件不得进入 Session format；只允许追加 DSH 已声明或经过正式 schema 版本化的新事件。
+New Local-Harness-pi kernel events must not enter the Session format; only events already declared by DSH or new events with formal schema versioning may be appended.
 
-## 19. 备份、导出与人工恢复
+## 19. Backup, export, and manual recovery
 
-V1 最低要求：
+Minimum V1 requirements:
 
-- 应用可以显示 Session 权威文件的只读位置。
-- 诊断导出默认只包含 header、event type/seq、错误码和版本，不包含正文和密钥。
-- 用户选择完整导出时明确告知可能包含代码、prompt 和工具输出。
-- 恢复操作不覆盖原 generation；先创建副本或 successor。
+- The application can display the read-only location of authoritative Session files.
+- Diagnostic exports include only headers, event type/seq, error codes, and versions by default, excluding content and secrets.
+- A user choosing full export is explicitly informed that it may contain code, prompts, and tool output.
+- Recovery does not overwrite the original generation; create a copy or successor first.
 
-V1 不实现云同步。将用户数据同步到云端必须另立威胁模型和冲突协议。
+V1 does not implement cloud synchronization. Synchronizing user data to the cloud requires a separate threat model and conflict protocol.
 
-## 20. 故障矩阵
+## 20. Failure matrix
 
-| 故障点 | 已知 durable 状态 | 恢复行为 | 自动重放 |
+| Failure point | Known durable state | Recovery behavior | Automatic replay |
 |---|---|---|---:|
-| 用户点击发送后 Host 退出 | 可能只有 Inbox splice | 恢复 pending Inbox 或已接纳 user message | 否，由 Agent 正常领取 |
-| provider 请求前退出 | step/user 已提交，无 assistant | 追加 attempt/closer，可提示重试 | 否 |
-| provider 流中退出 | partial runtime；可能 embedded stream prefix | 提交 interrupted message/attempt 和 closer | 否 |
-| tool/call 前退出 | assistant 含调用，无 call event | 按 DSH 修复为未开始 | 否 |
-| tool body 中退出 | tool/call，无 result | `TOOL_OUTCOME_UNKNOWN` | 严禁 |
-| tool/result 后退出 | call/result 已配对 | 追加 step/turn closer | 否 |
-| persistence append 失败 | 内存可能有未落盘 event | 运行失败并停止；只恢复已 fsync prefix | 否 |
-| SQLite 失败 | Session 正常 | 禁用搜索或重建 | 不适用 |
-| renderer 崩溃 | Host/Session 正常 | snapshot + 增量重连 | 不适用 |
-| Host 崩溃 | 仅物理 committed prefix | 完整恢复算法 | 仅用户明确重试 |
+| Host exits after the user clicks send | Possibly only an Inbox splice | Restore pending Inbox or accepted user message | No; Agent claims normally |
+| Exit before provider request | Step/user committed, no assistant | Append attempt/closer; may prompt a retry | No |
+| Exit during provider stream | Partial runtime; possibly embedded stream prefix | Commit interrupted message/attempt and closer | No |
+| Exit before tool/call | Assistant contains a call, no call event | Repair as not started under DSH rules | No |
+| Exit during tool body | tool/call without result | `TOOL_OUTCOME_UNKNOWN` | Strictly prohibited |
+| Exit after tool/result | Call/result paired | Append step/turn closer | No |
+| Persistence append fails | Memory may contain unpersisted events | Fail and stop the run; recover only the fsynced prefix | No |
+| SQLite fails | Session intact | Disable search or rebuild | Not applicable |
+| Renderer crashes | Host/Session intact | Reconnect using snapshot and deltas | Not applicable |
+| Host crashes | Only the physically committed prefix | Full recovery algorithm | Only on explicit user retry |
 
-## 21. 完整性检查
+## 21. Integrity checks
 
-每次恢复至少验证：
+Every recovery verifies at least:
 
-- Header/sessionId/path 一致。
-- format version 与文件名一致。
-- seq 连续。
+- Header/sessionId/path consistency.
+- Format version matches the filename.
+- Continuous seq values.
 - event lossless JSON。
-- turn/step 平衡或仅最后尾部可修复。
-- tool call/result 配对和 sourceEventSeqs。
-- messageId/callId 在所需作用域唯一。
-- request header 可重建。
-- compaction/surface generation 单调。
-- persisted revision 与打开时观察一致。
+- Balanced turns/steps, or a repairable final tail only.
+- Tool call/result pairing and sourceEventSeqs.
+- messageId/callId uniqueness within their required scopes.
+- Reconstructible request headers.
+- Monotonic compaction/surface generations.
+- Persisted revision matches the revision observed on open.
 
-运行中 debug/test 构建还应持续验证 Agent id、Session id、开放 position、Pi event state 和 commit buffer。
+Running debug/test builds should also continuously verify Agent id, Session id, open position, Pi event state, and the commit buffer.
 
-## 22. 必须执行的恢复测试
+## 22. Required recovery tests
 
-### 22.1 进程级测试
+### 22.1 Process-level tests
 
-每个场景使用子进程执行到指定 fault injection point 后强制终止，再由新进程恢复：
+Each scenario runs in a child process until a designated fault injection point, forcefully terminates it, then recovers in a new process:
 
-1. header 首次物化期间。
-2. raw line 中间。
-3. Zstd final frame 中间。
-4. assistant text delta 中间。
-5. assistant 完成、commit 前。
-6. tool/call commit 后、tool body 前。
-7. tool body 已产生外部文件后、result 前。
-8. tool/result 后、step/end 前。
-9. step/end 后、turn/end 前。
-10. close/flush 期间。
-11. automatic compaction 新 generation 提交前与提交后。
-12. provider context overflow 触发 compaction 后、重试请求前。
+1. During initial header materialization.
+2. In the middle of a raw line.
+3. In the middle of the final Zstd frame.
+4. In the middle of an assistant text delta.
+5. After assistant completion, before commit.
+6. After tool/call commit, before the tool body.
+7. After the tool body produces an external file, before result.
+8. After tool/result, before step/end.
+9. After step/end, before turn/end.
+10. During close/flush.
+11. Before and after committing a new generation for automatic compaction.
+12. After compaction triggered by provider context overflow, before the retry request.
 
-### 22.2 并发测试
+### 22.2 Concurrency tests
 
-- 两进程同时 resume 同一 session，只有一个成功。
-- live writer 持有时搜索索引可观察 committed prefix，不获得写权。
-- 配置更新与模型请求竞争时，当前 step 使用冻结快照。
-- 并行工具以反向完成顺序结束，Session 仍按源顺序。
+- Two processes resume the same session concurrently; only one succeeds.
+- While a live writer holds ownership, the search index can observe the committed prefix without acquiring write ownership.
+- When a configuration update races with a model request, the current step uses a frozen snapshot.
+- Parallel tools complete in reverse order, while Session retains source order.
 
-### 22.3 属性测试
+### 22.3 Property tests
 
-对合法 event 序列随机插入单点中断，验证恢复结果始终是原 committed prefix 加允许的 synthetic closers，不产生重复原事件。
+Insert random single-point interruptions into valid event sequences and verify that recovery always produces the original committed prefix plus permitted synthetic closers, without duplicating original events.
 
-## 23. 发布门禁
+## 23. Release gates
 
-以下任一现象阻断发布：
+Any of the following blocks release:
 
-- 出现 Pi session 文件或第二个会话数据库。
-- UI 重启后依赖 local storage 才能看到完整消息。
-- tool outcome unknown 被自动重试。
-- SQLite 损坏导致权威会话打不开。
-- 同 session 两个 writer 均成功。
-- transient 和 durable assistant 同时显示为两条消息。
-- Session append 失败后工具仍继续执行。
-- 完整 checksum corruption 被静默截断。
-- Pi Harness Compaction 被加载，或 DSH compaction 后 Pi 继续拼接旧 transcript。
-- context overflow 在同一 run 中形成无限 compaction/retry 循环。
+- A Pi session file or second session database appears.
+- The UI needs local storage to show complete messages after restarting.
+- An unknown tool outcome is retried automatically.
+- SQLite corruption prevents opening authoritative sessions.
+- Two writers both succeed for the same session.
+- Transient and durable assistant content appears as two messages simultaneously.
+- A tool continues executing after Session append fails.
+- Complete-frame checksum corruption is silently truncated.
+- Pi Harness Compaction is loaded, or Pi keeps appending to the old transcript after DSH compaction.
+- Context overflow creates an infinite compaction/retry loop in one run.
 
-## 24. 运维诊断
+## 24. Operational diagnostics
 
-诊断页面应报告但不暴露正文：
+The diagnostic page should report the following without exposing content:
 
-- Session id、安全缩写路径和当前 generation。
+- Session id, safely abbreviated path, and current generation.
 - persistence format/compression/revision。
-- 是否有 write owner。
+- Whether a write owner exists.
 - event count、last seq、last closed turn/step。
-- SQLite index generation 和 last reconciliation revision。
-- 当前 Kernel id/version，仅作运行信息。
-- 最近一个稳定错误码。
+- SQLite index generation and last reconciliation revision.
+- Current Kernel id/version, for runtime information only.
+- The most recent stable error code.
 
-这些信息足以判断“权威日志、派生索引、运行缓存”哪一层异常，而无需比较两份聊天记录。
+This information identifies whether the authoritative log, derived index, or runtime cache is faulty without comparing two chat records.
