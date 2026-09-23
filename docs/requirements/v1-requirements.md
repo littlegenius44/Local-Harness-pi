@@ -1,603 +1,605 @@
-# Local-Harness-pi V1 需求规格
+# Local-Harness-pi V1 Requirements Specification
 
-文档版本：1.2
+English | [中文](v1-requirements.zh.md)
 
-适用版本：V1
+Document version: 1.2
 
-架构基线：DSH 产品平台 + Pi 对话式工具循环内核 + 单一 DSH 对话/执行恢复事实源
+Applicable release: V1
 
-## 1. 规范用语
+Architecture baseline: DSH product platform + Pi conversational tool-loop kernel + a single DSH source of conversation/execution recovery truth
 
-- **必须（MUST）**：V1 发布阻断条件。
-- **应该（SHOULD）**：除非有记录充分理由，否则必须实现。
-- **可以（MAY）**：不影响 V1 验收的可选行为。
-- **禁止（MUST NOT）**：实现中不得出现。
-- **P0**：缺失则不能发布。
-- **P1**：V1 应包含；若延期必须由项目所有者确认。
-- **P2**：明确进入 V1.1 或以后。
+## 1. Normative terminology
 
-本交接计划没有批准任何 P1 延期：FR-025、FR-047、FR-052、FR-064、FR-065、FR-071、FR-072、FR-083、NFR-020、NFR-030、NFR-031 和 NFR-032 均纳入 V1 实施与验收。执行者不得自行把它们移出 V1；若项目所有者以后调整范围，必须先更新需求、追踪矩阵和对应 PR 计划。
+- **MUST**: a V1 release blocker.
+- **SHOULD**: must be implemented unless a sufficient justification is recorded.
+- **MAY**: optional behavior that does not affect V1 acceptance.
+- **MUST NOT**: prohibited in the implementation.
+- **P0**: release is prohibited if missing.
+- **P1**: should be included in V1; deferral requires project-owner confirmation.
+- **P2**: explicitly assigned to V1.1 or later.
 
-需求 ID 是稳定引用。重写需求时保留 ID；删除需求时标记废弃，不复用编号。
+This handoff plan approves no P1 deferrals: FR-025, FR-047, FR-052, FR-064, FR-065, FR-071, FR-072, FR-083, NFR-020, NFR-030, NFR-031, and NFR-032 are all included in V1 implementation and acceptance. Implementers must not remove them from V1 on their own; any later owner-approved scope change must first update the requirements, traceability matrix, and corresponding PR plan.
 
-## 2. 产品定位
+Requirement IDs are stable references. Retain IDs when rewriting requirements; mark removed requirements deprecated without reusing their numbers.
 
-Local-Harness-pi 是面向本地代码工作区的桌面 Coding Agent。它提供 DSH 风格的完整桌面产品体验，使用 Pi Agent Core 运行代码任务，并允许用户在本地 OpenAI-compatible 模型与云端 OpenAI-compatible 模型之间切换。
+## 2. Product positioning
 
-V1 的核心价值不是创造新的 Agent 平台，而是验证以下组合可以稳定工作：
+Local-Harness-pi is a desktop Coding Agent for local code workspaces. It provides a complete DSH-style desktop experience, runs coding tasks with Pi Agent Core, and lets users switch between local and cloud OpenAI-compatible models.
 
-1. DSH 已有桌面、会话、工具和插件能力保持完整。
-2. Pi 循环可以成为唯一执行内核。
-3. 会话只有一个权威记录且可从崩溃中恢复。
+V1's core value is to verify that the following combination works reliably, rather than create a new Agent platform:
 
-## 3. 目标用户和主要任务
+1. Existing DSH desktop, session, tool, and plugin capabilities remain complete.
+2. The Pi loop can serve as the sole execution kernel.
+3. Sessions have one authoritative record and recover from crashes.
 
-### 3.1 目标用户
+## 3. Target users and primary tasks
 
-- 在 Windows 本地项目中使用 Agent 编写、解释和修复代码的个人开发者。
-- 希望使用本地模型保护代码隐私，同时需要时切换云模型的用户。
-- 需要 Skills、MCP、Goal/Plan 和可审查工具过程的高级用户。
+### 3.1 Target users
 
-### 3.2 主要任务
+- Individual developers using an Agent to write, explain, and fix code in local Windows projects.
+- Users who want local models for code privacy while retaining the option to switch to cloud models.
+- Advanced users needing Skills, MCP, Goal/Plan, and reviewable tool execution.
 
-- 打开一个本地工作区并提问。
-- 让 Agent 搜索、读取、修改文件并运行命令。
-- 审查工具调用、差异和终端输出。
-- 在工具执行前处理权限确认。
-- 切换本地/云端模型及推理强度。
-- 使用 Skill、MCP、Goal 和 Plan 模式。
-- 关闭应用后恢复原会话并继续。
+### 3.2 Primary tasks
 
-## 4. 发布平台与兼容性
+- Open a local workspace and ask questions.
+- Have the Agent search, read, and modify files and run commands.
+- Review tool calls, diffs, and terminal output.
+- Handle permission confirmations before tool execution.
+- Switch local/cloud models and reasoning effort.
+- Use Skill, MCP, Goal, and Plan modes.
+- Restore and continue the original session after closing the application.
 
-### PLAT-001（P0）Windows 发布目标
+## 4. Release platforms and compatibility
 
-V1 的正式发布和验收目标是 Windows 11 x64。Windows 10 22H2 可以兼容，但不作为阻断发布的唯一环境。macOS 和 Linux 保留 DSH 源码兼容性，不属于 V1 二进制发布门禁。
+### PLAT-001 (P0) Windows release target
 
-验收：
+Windows 11 x64 is the official V1 release and acceptance target. Windows 10 22H2 may be compatible but is not the sole release-blocking environment. macOS and Linux retain DSH source compatibility and are outside V1 binary release gates.
 
-- 安装包可在干净 Windows 11 x64 用户环境安装、启动和卸载。
-- V1 Alpha 为未签名 NSIS 手工安装包，发布页必须明示 SmartScreen 警告和 SHA-256；代码签名、自动安装与回滚属于 FR-092/V1.1。
-- 应用数据写入 Electron `userData` 下的应用专用目录。
-- 项目文件只在用户选定工作区内修改。
+Acceptance:
 
-### PLAT-002（P0）运行时版本固定
+- The installer installs, launches, and uninstalls in a clean Windows 11 x64 user environment.
+- V1 Alpha is an unsigned NSIS installer for manual installation. Its release page must explicitly state the SmartScreen warning and SHA-256; code signing, automatic installation, and rollback belong to FR-092/V1.1.
+- Application data is written to an application-specific directory under Electron `userData`.
+- Project files are modified only within the user-selected workspace.
 
-Node/Electron/pnpm 版本必须继承固定 DSH 基线；Pi Agent Core 与 Pi AI 必须固定同一 `0.85.1` 版本。锁文件必须提交。
+### PLAT-002 (P0) Pinned runtime versions
 
-### PLAT-003（P0）许可证和来源
+Node/Electron/pnpm versions must inherit the pinned DSH baseline; Pi Agent Core and Pi AI must both be pinned to `0.85.1`. The lockfile must be committed.
 
-必须保留 DSH 和 Pi 的 MIT 许可证与来源说明。Codex 只作为设计参考，不得将其 Apache-2.0 源码片段复制到本项目而不进行来源和许可证审查。
+### PLAT-003 (P0) Licenses and provenance
 
-## 5. 工作区与桌面壳
+Preserve DSH and Pi MIT licenses and source attribution. Codex is a design reference only; its Apache-2.0 source snippets must not be copied into this project without provenance and license review.
 
-### FR-001（P0）打开工作区
+## 5. Workspace and desktop shell
 
-用户必须能够通过系统目录选择器打开一个现有本地目录。Host 必须解析真实路径并创建或复用 DSH Workspace。
+### FR-001 (P0) Open a workspace
 
-验收：
+Users must be able to open an existing local directory with the system directory picker. Host must resolve its real path and create or reuse a DSH Workspace.
 
-- 非目录、不可读目录和已失效路径显示可行动错误。
-- 同一路径的大小写或符号链接别名不得创建两个逻辑 Workspace。
-- 最近工作区可以从侧栏重新打开。
+Acceptance:
 
-### FR-002（P0）单实例与深链接
+- Non-directories, unreadable directories, and stale paths display actionable errors.
+- Case variants or symlink aliases of the same path must not create two logical Workspaces.
+- Recent workspaces can be reopened from the sidebar.
 
-必须保留 DSH 单实例行为。第二次启动携带的工作区或会话参数应转交现有实例；未知或非法参数不得直接进入 renderer。
+### FR-002 (P0) Single instance and deep links
 
-### FR-003（P0）桌面安全隔离
+Retain DSH single-instance behavior. Workspace or session arguments from a second launch should be forwarded to the existing instance; unknown or invalid arguments must not enter the renderer directly.
 
-renderer 必须保持 `nodeIntegration=false`、`contextIsolation=true`、`sandbox=true` 和 `webSecurity=true`。预加载层只暴露经过 schema 验证的最小 API。
+### FR-003 (P0) Desktop security isolation
 
-### FR-004（P0）产品标识、关于与许可
+The renderer must retain `nodeIntegration=false`, `contextIsolation=true`, `sandbox=true`, and `webSecurity=true`. The preload layer exposes only a minimal schema-validated API.
 
-窗口标题、PWA 名称、侧栏/空会话品牌、安装包名、应用数据目录、About 和发布产物名必须统一为 `Local-Harness-pi`，应用 ID 固定为 `io.localharness.pi`。Windows 桌面 Help 菜单必须提供 About 入口，显示应用版本、固定 DSH commit、Pi package 版本以及“非 OpenAI/DeepSeek 官方产品”声明；同一入口必须能打开随安装包分发的第三方许可文件。桌面与 Web 不得继续使用 DSH 官方 wordmark、鱼形标志或 favicon 作为本产品标志；V1 使用仓库自带的中性 `LHπ` 标志，不引入新的第三方商标资产。
+### FR-004 (P0) Product identity, About, and licenses
 
-验收：
+Window title, PWA name, sidebar/empty-session branding, installer name, application data directory, About, and release artifact names must consistently use `Local-Harness-pi`; the application ID is fixed as `io.localharness.pi`. The Windows desktop Help menu must provide About, showing the application version, pinned DSH commit, Pi package version, and a statement that this is not an official OpenAI/DeepSeek product; the same entry must open the third-party license file distributed with the installer. Desktop and Web must not use the official DSH wordmark, fish logo, or favicon as this product's identity; V1 uses the repository's neutral `LHπ` logo without introducing new third-party trademark assets.
 
-- `THIRD_PARTY_NOTICES.txt` 至少列出 DSH、Pi 的仓库、固定版本/commit 和 MIT 许可；Codex 只标记为 Apache-2.0 设计参考，不得暗示分发了 Codex 源码。
-- About 与许可入口离线可用，不依赖 GitHub 可达。
-- 打包测试必须证明许可文件进入 Windows unpacked artifact；窗口/PWA/侧栏/空会话/首次欢迎页不得把 `DeepSeek Harness` 显示为当前产品名。
-- `DeepSeek Harness` 只允许出现在真实上游归属语境（About、第三方许可、`UPSTREAM.md`、源码/开发者文档）和内部兼容标识中。`@deepseek-ai/dsh-*` 包名、Cordis plugin id、`dsh-app` scheme、`window.dshDesktop`、`DSH_*` 环境变量、Session/remote event type 与 CLI 可执行名 `dsh` 不做机械改名。
-- 桌面所用 Web profile 必须关闭 DSH 默认模型身份句，并注入 `Local-Harness-pi` 身份；面向模型的 Web GUI 上下文不得把当前产品称为 DeepSeek Harness，但可准确说明它 built on DeepSeek Harness。
+Acceptance:
 
-## 6. 会话与消息
+- `THIRD_PARTY_NOTICES.txt` lists at least the DSH and Pi repositories, pinned versions/commits, and MIT licenses; Codex is identified only as an Apache-2.0 design reference, without implying distribution of Codex source.
+- About and license access work offline without depending on GitHub availability.
+- Packaging tests prove that the license file is present in the Windows unpacked artifact; the window/PWA/sidebar/empty session/first welcome page must not display `DeepSeek Harness` as the current product name.
+- `DeepSeek Harness` is allowed only in accurate upstream attribution contexts (About, third-party licenses, `UPSTREAM.md`, source/developer documentation) and internal compatibility identifiers. Do not mechanically rename `@deepseek-ai/dsh-*` package names, Cordis plugin IDs, the `dsh-app` scheme, `window.dshDesktop`, `DSH_*` environment variables, Session/remote event types, or the `dsh` CLI executable.
+- The desktop Web profile must disable the default DSH model identity sentence and inject the `Local-Harness-pi` identity; model-facing Web GUI context must not call the current product DeepSeek Harness, but may accurately state that it is built on DeepSeek Harness.
 
-### FR-010（P0）创建会话
+## 6. Sessions and messages
 
-用户在工作区中创建会话时，系统必须生成一个同时用于 DSH Agent 和 DSH Session 的唯一 `sessionId`。在 Agent scope、Session、UI 路由和日志中不得生成第二个对话 ID。
+### FR-010 (P0) Create a session
 
-### FR-011（P0）发送普通消息
+When a user creates a session in a workspace, the system must generate one unique `sessionId` shared by the DSH Agent and DSH Session. Agent scope, Session, UI routes, and logs must not generate a second conversation ID.
 
-空闲时发送消息必须进入 DSH `next-turn` Inbox，持久记录 inbox splice，并唤醒 Pi 驱动的 Agent。输入在被 step 接纳后形成一个 DSH `user/message`。
+### FR-011 (P0) Send an ordinary message
 
-Host 只有在该 Inbox splice 通过 Session durability barrier 后才向 Client 确认为“已接纳”。验收：连续双击发送或网络重试不能造成同一 `messageId` 的重复提交；收到确认后强制结束 Host，消息仍可恢复。
+A message sent while idle must enter the DSH `next-turn` Inbox, durably record the inbox splice, and wake the Pi-driven Agent. Once a step accepts the input, it becomes one DSH `user/message`.
 
-### FR-012（P0）Steer 与 Follow-up
+Host acknowledges acceptance to Client only after that Inbox splice passes the Session durability barrier. Acceptance: double-clicking send or retrying the network request must not duplicate the same `messageId`; the message remains recoverable if Host is forcefully terminated after acknowledgement.
 
-- 运行中“立即调整”进入 `next-step`，在当前模型响应及已开始的工具批次完成后进入最近的 Pi turn。
-- 普通追问进入 `next-turn`，当前 DSH turn 结束后单独开始新 turn。
-- UI 必须清楚区分已发送、排队和已接纳状态。
+### FR-012 (P0) Steer and Follow-up
 
-### FR-013（P0）流式 assistant 消息
+- Immediate steering during execution enters `next-step` and reaches the nearest Pi turn after the current model response and already-started tool batch complete.
+- An ordinary follow-up enters `next-turn` and starts a separate turn after the current DSH turn ends.
+- The UI must clearly distinguish sent, queued, and accepted states.
 
-前端必须显示文本、reasoning 和 tool-call 参数的增量。流式内容属于临时状态；收到 DSH durable assistant event 后必须原位替换，不能保留两条消息。
+### FR-013 (P0) Streaming assistant messages
 
-### FR-014（P0）取消
+The frontend must display incremental text, reasoning, and tool-call arguments. Streamed content is transient; arrival of the DSH durable assistant event must replace it in place without retaining two messages.
 
-用户可以取消当前运行。取消必须：
+### FR-014 (P0) Cancellation
 
-- 中止当前 provider stream。
-- 将信号传播到已开始的 DSH 工具。
-- 等待已开始工具达到 quiescence。
-- 为已开始但未正常结束的 step/turn 写入合法闭合事件。
-- 默认清除尚未接纳的队列；显式 `keepInbox` 时保留。
+Users can cancel the current run. Cancellation must:
 
-### FR-015（P0）恢复会话
+- Abort the current provider stream.
+- Propagate the signal to started DSH tools.
+- Wait for started tools to reach quiescence.
+- Write valid closing events for started steps/turns that did not finish normally.
+- Clear unaccepted queued input by default; retain it when `keepInbox` is explicit.
 
-应用重启后必须从 DSH JSONL/Zstd Session 恢复会话。恢复不得读取 Pi session store，也不得从 SQLite FTS 反向构造正文。
+### FR-015 (P0) Restore a session
 
-### FR-016（P0）会话列表和搜索
+After restarting, the application must restore sessions from DSH JSONL/Zstd Session. Recovery must neither read a Pi session store nor reconstruct content from SQLite FTS.
 
-列表的身份、标题、工作区和可用性来自 DSH Session/Query。标题/元数据搜索必须直接可用；正文全文搜索在用户首次提交非空查询时按需打开 DSH SQLite FTS，不得要求用户编辑配置文件。索引缺失、损坏或重建中时，会话仍可按权威日志打开；UI 必须分别显示“正在建立索引”和“索引失败，可重试”，不得显示“会话丢失”。
+### FR-016 (P0) Session listing and search
 
-### FR-017（P0）会话整理、分叉与导出
+List identity, title, workspace, and availability come from DSH Session/Query. Title/metadata search must work directly; content full-text search opens DSH SQLite FTS on demand when the user first submits a non-empty query, without requiring configuration-file edits. When the index is missing, corrupt, or rebuilding, sessions remain openable from authoritative logs; the UI must distinguish indexing from index failure with retry, and must not report lost sessions.
 
-必须保留 DSH 已有的会话重命名、搜索、归档、取消归档、分叉和导出入口。归档是 V1 唯一默认移除入口，不增加永久删除会话按钮。
+### FR-017 (P0) Session organization, forking, and export
 
-验收：
+Retain existing DSH entries for session renaming, search, archive, unarchive, fork, and export. Archive is the only default removal action in V1; do not add a permanent session deletion button.
 
-- 重命名和归档状态由 DSH Session/Query 持久化，重启后保持一致。
-- 已归档会话不出现在默认列表，但能从归档筛选中打开并取消归档。
-- 分叉只复制平衡的已完成事件前缀并记录 `parentSession`；不得复制开放 step、悬空 tool call 或 Pi 运行时对象。
-- Header 与 `/export` 必须导出同一 DSH Session generation；完整导出明确提示可能包含 prompt、代码和工具输出。
+Acceptance:
 
-### FR-018（P0）单写者
+- DSH Session/Query persists rename and archive state consistently across restarts.
+- Archived sessions are absent from the default list but can be opened and unarchived through the archive filter.
+- Forking copies only a balanced prefix of completed events and records `parentSession`; it must not copy open steps, dangling tool calls, or Pi runtime objects.
+- The Header and `/export` must export the same DSH Session generation; full export explicitly warns that it may contain prompts, code, and tool output.
 
-同一 session 同时只能存在一个活动写者。第二个进程或恢复操作必须明确失败，不能进入“最后写入者获胜”。
+### FR-018 (P0) Single writer
 
-### FR-019（P0）长会话压缩
+A session can have only one active writer at a time. A second process or recovery operation must fail explicitly instead of using last-writer-wins behavior.
 
-长会话压缩必须继续由 DSH Compaction 和 surface replacement 负责。Pi Harness Compaction 禁止进入生产依赖；Pi 每个 step 必须读取最新 DSH surface generation。
+### FR-019 (P0) Long-session compaction
 
-验收：
+DSH Compaction and surface replacement must retain responsibility for long-session compaction. Pi Harness Compaction is prohibited in production dependencies; Pi must read the latest DSH surface generation at every step.
 
-- 自动压力触发、provider 返回上下文溢出后的单次压缩恢复，以及 `/compact` 手工触发均有集成测试。
-- 压缩成功后，下一 step 只使用新 surface，不把旧 Pi transcript 追加回来；原始 durable event 历史仍可审计。
-- 压缩失败不得覆盖旧 surface；确定无法压缩时返回可行动错误，不进入无限重试。
-- 重启后从 DSH compaction/surface event 恢复，不读取 Pi session store。
+Acceptance:
 
-## 7. Pi 执行内核
+- Integration tests cover automatic pressure triggers, single compaction recovery after provider context overflow, and manual `/compact`.
+- After successful compaction, the next step uses only the new surface without appending the old Pi transcript back; original durable event history remains auditable.
+- Failed compaction must not overwrite the old surface; if compaction is definitively impossible, return an actionable error instead of retrying indefinitely.
+- After restart, recover from DSH compaction/surface events without reading a Pi session store.
 
-### FR-020（P0）唯一活动内核
+## 7. Pi execution kernel
 
-V1 默认组合必须只激活 `@local-harness/pi-agent-loop` 一个 AgentFactory。该实现必须继承 DSH `AgentLoop` 的创建、恢复、发布、回滚和销毁生命周期，只通过 protected machine-construction seam 构造 `DshPiAgent`；原 DSH ReactLoopAgent 不得同时激活，Pi 包不得复制或重新实现第二套 AgentFactory 生命周期。
+### FR-020 (P0) Sole active kernel
 
-### FR-021（P0）Pi 依赖边界
+V1's default composition must activate exactly one AgentFactory, `@local-harness/pi-agent-loop`. This implementation must inherit DSH `AgentLoop` creation, recovery, publication, rollback, and disposal lifecycle, constructing `DshPiAgent` only through the protected machine-construction seam; the original DSH ReactLoopAgent must not activate simultaneously, and the Pi package must not copy or reimplement a second AgentFactory lifecycle.
 
-生产运行时只允许使用 Pi Agent Core 的循环、Agent、事件和工具类型。禁止加载 Pi Harness Session、Skills、Compaction 和 built-in coding tools。
+### FR-021 (P0) Pi dependency boundary
 
-### FR-022（P0）上下文重建
+Production runtime may use only Pi Agent Core loops, Agent, events, and tool types. Loading Pi Harness Session, Skills, Compaction, and built-in coding tools is prohibited.
 
-每个模型 step 开始前，Pi 上下文必须从当前 DSH Session surface、DSH System Prompt assembly、DSH Tool schemas 和 DSH model selection 重建。不得直接把上一个 step 的 Pi 内存 transcript 当作唯一输入。
+### FR-022 (P0) Context reconstruction
 
-### FR-023（P0）事件屏障
+Before each model step, Pi context must be rebuilt from the current DSH Session surface, DSH System Prompt assembly, DSH Tool schemas, and DSH model selection. The previous step's in-memory Pi transcript must not be the sole input.
 
-Pi `Agent.subscribe()` 的异步 listener 必须按顺序 await。`agent_end` 只有在所有 DSH Session 追加、turn 末尾 `flush()` 和必要收尾完成后才可使 DSH Agent 进入 idle。
+### FR-023 (P0) Event barriers
 
-### FR-024（P0）Turn/Step 映射
+Pi `Agent.subscribe()` async listeners must be awaited in order. `agent_end` may transition the DSH Agent to idle only after all DSH Session appends, the end-of-turn `flush()`, and required cleanup complete.
 
-一次 Pi run 对应一个 DSH turn；Pi 每次 `turn_start`/`turn_end` 对应一个 DSH step。映射必须通过状态机验证，非法顺序立即产生 `KERNEL_EVENT_ORDER` 并停止运行。
+### FR-024 (P0) Turn/Step mapping
 
-### FR-025（P1）未来内核接口
+One Pi run maps to one DSH turn; each Pi `turn_start`/`turn_end` maps to one DSH step. A state machine must validate this mapping; an invalid order immediately raises `KERNEL_EVENT_ORDER` and stops execution.
 
-Pi 必须位于 `KernelDriver` 之后。DSH Agent/UI/Session 不得 import Pi 事件类型。V1 的 `KernelDriver` 只抽象对话式模型—工具循环，不承诺通用 agent graph、多 Agent 编排或任意后台 workflow。V1 不需要第二实现，但应提供 mock driver 完成契约测试。
+### FR-025 (P1) Future kernel interface
 
-## 8. 模型配置与调用
+Pi must sit behind `KernelDriver`. DSH Agent/UI/Session must not import Pi event types. V1 `KernelDriver` abstracts only the conversational model-tool loop and does not promise general agent graphs, multi-Agent orchestration, or arbitrary background workflows. V1 requires no second implementation, but should supply a mock driver for contract tests.
 
-### FR-030（P0）本地 OpenAI-compatible route
+## 8. Model configuration and invocation
 
-用户必须可配置 loopback `baseUrl`、wire API、模型 id、上下文窗口、最大输出 token 和推理强度。HTTP 只允许 loopback 地址；远程非 TLS URL 必须拒绝。base URL 禁止 userinfo、query 和 fragment，credential 不能藏在 URL 中。
+### FR-030 (P0) Local OpenAI-compatible route
 
-### FR-031（P0）云端 OpenAI-compatible route
+Users must be able to configure loopback `baseUrl`, wire API, model ID, context window, maximum output tokens, and reasoning effort. HTTP is allowed only for loopback addresses; remote non-TLS URLs must be rejected. Base URLs prohibit userinfo, query, and fragment components; credentials must not be hidden in URLs.
 
-用户必须可配置 HTTPS `baseUrl`、wire API、模型 id 和 credential reference。base URL 禁止 userinfo、query 和 fragment。API key 不得保存在普通设置 JSON、Session、日志或 UI 状态快照中。V1 不开放任意请求 header 编辑；标准 OpenAI Authorization 只能由 Host 从 credential reference 构造。
+### FR-031 (P0) Cloud OpenAI-compatible route
 
-### FR-032（P0）显式 wire API
+Users must be able to configure HTTPS `baseUrl`, wire API, model ID, and credential reference. Base URLs prohibit userinfo, query, and fragment components. API keys must not be stored in ordinary settings JSON, Session, logs, or UI state snapshots. V1 does not expose arbitrary request-header editing; only Host may construct standard OpenAI Authorization from a credential reference.
 
-route 必须显式选择：
+### FR-032 (P0) Explicit wire API
+
+A route must explicitly select:
 
 - `openai-responses`
 - `openai-completions`
 
-不得根据路径是否包含 `/responses` 自动猜测。
+Do not infer it automatically from whether the path contains `/responses`.
 
-### FR-033（P0）模型发现与手工模型
+### FR-033 (P0) Model discovery and manual models
 
-支持 provider 模型列表发现时，用户可刷新列表；不支持时可手工声明模型。发现失败不得删除已有可用手工配置。
+Users can refresh a provider's model list when discovery is supported; otherwise they can declare models manually. Discovery failure must not delete existing usable manual configuration.
 
-### FR-034（P0）请求冻结
+### FR-034 (P0) Request freezing
 
-provider、model、reasoning、maxTokens、凭据解析结果和 provider snapshot 必须在单个 step 第一次 await 前冻结。设置修改只影响后续 step。
+Provider, model, reasoning, maxTokens, resolved credentials, and provider snapshot must be frozen before the first await in a step. Settings changes affect only subsequent steps.
 
-### FR-035（P0）能力校验
+### FR-035 (P0) Capability validation
 
-在发起请求前必须校验：图片输入、reasoning level、tool call 和上下文容量。明确不支持的能力应返回稳定错误码，不得静默丢弃。
+Before making a request, validate image input, reasoning level, tool calls, and context capacity. Explicitly unsupported capabilities should return stable error codes rather than being silently dropped.
 
-### FR-036（P0）错误与重试
+### FR-036 (P0) Errors and retries
 
-鉴权、限流、配额、超时、上下文溢出、无效请求、服务端错误和传输中断必须分类。重试使用 DSH 策略并记录 attempt；取消、鉴权、无效请求和确定的上下文溢出不得盲目重试。
+Classify authentication, rate limiting, quota, timeout, context overflow, invalid requests, server errors, and transport interruption. Retries use DSH policy and record attempts; cancellation, authentication failure, invalid requests, and definitive context overflow must not be blindly retried.
 
-### FR-037（P0）V1 出站限定
+### FR-037 (P0) V1 outbound scope
 
-V1 模型连接只实现 OpenAI-compatible 出站调用。Anthropic/Gemini 直接协议和 OpenAI-compatible 入站网关均不得作为 V1 隐含依赖。
+V1 model connections implement only outbound OpenAI-compatible calls. Direct Anthropic/Gemini protocols and an inbound OpenAI-compatible gateway must not become implicit V1 dependencies.
 
-V1 模型流固定使用 HTTP SSE；WebSocket transport 不得出现在产品写入路径。模型发现、模型流和 HTTP MCP 必须复用同一个 Host guarded-fetch 实现，对初始 URL、DNS pinning、redirect、credential origin 和资源释放执行一致策略。
+V1 model streaming is fixed to HTTP SSE; WebSocket transport must not appear in the product write path. Model discovery, model streaming, and HTTP MCP must reuse one Host guarded-fetch implementation, enforcing consistent initial URL, DNS pinning, redirect, credential-origin, and resource-release policies.
 
-## 9. 工具和权限
+## 9. Tools and permissions
 
-### FR-040（P0）DSH 工具目录
+### FR-040 (P0) DSH tool catalog
 
-Pi 看见的工具必须来自当前 Agent scope 的 DSH `tools.schemas()` 快照。被 Plan 模式、preset 或策略隐藏的工具不得出现在 Pi schema 中。
+Tools visible to Pi must come from the current Agent scope's DSH `tools.schemas()` snapshot. Tools hidden by Plan mode, preset, or policy must not appear in Pi schemas.
 
-### FR-041（P0）统一执行管线
+### FR-041 (P0) Unified execution pipeline
 
-每个 Pi 工具调用必须进入 DSH `tools.execute()`。工具参数、callId、agent 和 AbortSignal 必须保留。
+Every Pi tool call must enter DSH `tools.execute()`. Preserve tool arguments, callId, agent, and AbortSignal.
 
-### FR-042（P0）工具调用持久顺序
+### FR-042 (P0) Durable tool-call ordering
 
-`tool/call` 必须在工具 body 开始前追加并通过该 Session 的 `flush()` durability barrier；`tool/result` 必须在 body/策略完全结束后追加并引用对应 call seq。并行结果按 assistant 源顺序写入。
+`tool/call` must be appended and pass that Session's `flush()` durability barrier before the tool body starts; `tool/result` must be appended only after body/policy execution fully ends and reference the corresponding call seq. Parallel results are written in assistant source order.
 
-### FR-043（P0）审批
+### FR-043 (P0) Approval
 
-工具为 `ask` 时 UI 显示工具名、关键参数、风险说明和作用域。只有 `allowed-once` 或当前策略允许后才能执行。拒绝必须形成模型可见的结构化 error result。
+When a tool policy is `ask`, the UI shows its name, key arguments, risk explanation, and scope. Execution requires `allowed-once` or permission from the current policy. Denial must produce a model-visible structured error result.
 
-### FR-044（P0）工作区限制
+### FR-044 (P0) Workspace restrictions
 
-文件读写、搜索、patch 和命令工作目录必须在授权 workspace 内。路径校验必须在规范化并解析符号链接后进行；路径穿越、UNC/设备路径和别名绕过必须有测试。
+File reads/writes, search, patches, and command working directories must stay within the authorized workspace. Validate paths after normalization and symlink resolution; tests must cover path traversal, UNC/device paths, and alias bypasses.
 
-### FR-045（P0）工具失败
+### FR-045 (P0) Tool failures
 
-未知工具、schema 错误、审批拒绝、超时、取消、输出无效和执行异常都必须收敛为一组 `tool/call` + `tool/result`，除非 Session 本身已无法写入。
+Unknown tools, schema errors, approval denial, timeout, cancellation, invalid output, and execution exceptions must converge to one `tool/call` + `tool/result` pair unless Session itself can no longer be written.
 
-### FR-046（P0）附加上下文与提前终止
+### FR-046 (P0) Additional context and early termination
 
-DSH `additionalContexts` 必须在结果之后进入下一个 step；`concludesTurn` 必须映射为 Pi batch termination，且仅当该批次全部结果都要求终止时停止自动模型调用。
+DSH `additionalContexts` must enter the next step after results; `concludesTurn` must map to Pi batch termination, stopping automatic model invocation only when all results in the batch request termination.
 
-### FR-047（P1）工具展示
+### FR-047 (P1) Tool presentation
 
-工具卡片默认展示状态、名称、简要目标、持续时间和结果摘要。参数、完整输出、错误和 meta 可以展开。重放会话时展示应由 durable event 重建。
+Tool cards display status, name, brief objective, duration, and result summary by default. Arguments, full output, errors, and metadata can be expanded. Session replay should reconstruct presentation from durable events.
 
-## 10. Goal 与 Plan
+## 10. Goal and Plan
 
-### FR-050（P0）Goal
+### FR-050 (P0) Goal
 
-必须保留 DSH `/goal` 能力和 UI 入口。Goal 创建、更新、完成和阻塞状态必须写入 DSH `goal/change`，恢复后可重建。
+Retain DSH `/goal` capability and UI entry. Goal creation, updates, completion, and blocked state must be written to DSH `goal/change` and reconstructed after recovery.
 
-### FR-051（P0）Plan
+### FR-051 (P0) Plan
 
-必须保留 DSH `/plan` 能力和 UI 入口。Plan 模式状态写入 DSH `plan/mode`；进入 Plan 后工具限制必须对 Pi 下一次工具快照生效。
+Retain DSH `/plan` capability and UI entry. Plan mode state is written to DSH `plan/mode`; entering Plan must apply tool restrictions to Pi's next tool snapshot.
 
-### FR-052（P1）设置与快捷入口一致
+### FR-052 (P1) Consistent settings and shortcuts
 
-设置页和 Composer “+” 菜单对 Goal/Plan 的显示必须读取同一 DSH client state；不得维护各自布尔值。
+The settings page and Composer '+' menu must read the same DSH client state for Goal/Plan display, without maintaining separate booleans.
 
-## 11. Skills、MCP 与插件
+## 11. Skills, MCP, and plugins
 
-### FR-060（P0）Skills 发现
+### FR-060 (P0) Skill discovery
 
-必须复用 DSH Skill/Skill Filesystem。Skill 元数据先发现，命中后再读取 `SKILL.md` 和必要引用，避免把所有技能正文放入上下文。
+Reuse DSH Skill/Skill Filesystem. Discover Skill metadata first; read `SKILL.md` and necessary references only after a match, avoiding loading every skill's full content into context.
 
-### FR-061（P0）Skills 作用域
+### FR-061 (P0) Skill scope
 
-全局、工作区和插件来源的 Skill 必须保持确定的优先级和冲突诊断。路径不得逃逸声明的 Skill root。
+Skills from global, workspace, and plugin sources must retain deterministic precedence and conflict diagnostics. Paths must not escape the declared Skill root.
 
-### FR-062（P0）MCP Client
+### FR-062 (P0) MCP Client
 
-必须复用 DSH MCP Client，支持 V1 已有的本地进程和 HTTP transport。连接失败应隔离到该 server，不得阻止其他 server 或基础工具加载。
+Reuse DSH MCP Client with the local-process and HTTP transports already available in V1. Connection failure should be isolated to that server without preventing other servers or built-in tools from loading.
 
-### FR-063（P0）MCP 工具统一注册
+### FR-063 (P0) Unified MCP tool registration
 
-MCP tools 必须注册到 DSH Tool Registry 后再由 ToolBridge 暴露给 Pi。Pi 不直接持有第二个 MCP client。
+MCP tools must register with DSH Tool Registry before ToolBridge exposes them to Pi. Pi does not directly own a second MCP client.
 
-### FR-064（P1）插件清单
+### FR-064 (P1) Plugin inventory
 
-插件页应显示已加载插件的 Skills、MCP、权限声明、来源和加载错误。V1 不承诺安装或再分发 OpenAI curated 插件。
+The plugin page should show loaded plugins' Skills, MCP, permission declarations, provenance, and load errors. V1 does not promise installation or redistribution of OpenAI curated plugins.
 
-### FR-065（P1）插件权限声明
+### FR-065 (P1) Plugin permission declarations
 
-V1 必须展示 DSH settings/composition 已声明并实际执行的文件、命令、网络和 MCP 有效权限；基础拒绝继续由 DSH workspace、network、approval 和 `tools/pre-execute` 策略执行。V1 将已安装的 DSH 可执行插件包视为受信任源码，不新增一个无法完整执行的便携 manifest 权限字段。跨来源插件 manifest、细粒度 grant、签名和信任链进入 V1.1。
+V1 must display effective file, command, network, and MCP permissions declared and enforced by DSH settings/composition; baseline denial remains enforced by DSH workspace, network, approval, and `tools/pre-execute` policies. V1 treats installed executable DSH plugin packages as trusted source and does not add a portable manifest permission field it cannot fully enforce. Cross-source plugin manifests, fine-grained grants, signatures, and trust chains belong to V1.1.
 
-### FR-066（P0）MCP 图形化管理
+### FR-066 (P0) Graphical MCP management
 
-设置页必须允许用户图形化新增、编辑、启用、停用和移除 GUI-managed MCP server，并显示连接阶段、最后错误和工具数。支持 DSH MCP Client 已有的 `stdio` 与 `streamable-http` transport；由固定 composition 提供的 MCP 行只读展示，不允许 UI 覆盖。
+The settings page must let users graphically add, edit, enable, disable, and remove GUI-managed MCP servers, showing connection phase, last error, and tool count. Support DSH MCP Client's existing `stdio` and `streamable-http` transports; MCP rows provided by fixed composition are read-only and cannot be overridden by the UI.
 
-GUI-managed server 的字段固定为：稳定记录 id、唯一 `serverName`、transport、`toolCallTimeoutMs`、重连策略，以及：
+GUI-managed server fields are fixed: stable record ID, unique `serverName`, transport, `toolCallTimeoutMs`, reconnection policy, plus:
 
-- `stdio`：`command`、`args[]`、可选 `cwd`、环境变量名到 credential reference 的绑定。
-- `streamable-http`：`url`、HTTP header 名到 credential reference 的绑定；Authorization 的 `Bearer ` 等公开前缀可以单独保存，credential value 不得进入配置。
+- `stdio`: `command`, `args[]`, optional `cwd`, and environment-variable-name bindings to credential references.
+- `streamable-http`: `url` and HTTP-header-name bindings to credential references; public Authorization prefixes such as `Bearer ` may be stored separately, but credential values must not enter configuration.
 
-V1 不提供任意 shell command line 文本框；`command` 与每个 argument 必须作为独立字段传给 DSH stdio transport，不经过 shell 展开。
+V1 does not provide an arbitrary shell command-line text box; `command` and each argument must be passed as separate fields to DSH stdio transport without shell expansion.
 
-### FR-067（P0）MCP 配置一致性与生效
+### FR-067 (P0) MCP configuration consistency and application
 
-GUI-managed MCP 配置必须由 Host 的 `local-harness.mcp` DSH settings namespace 持久化，Client 不得保存副本。启用记录在 DSH Tool Registry 的 deployment-global/root layer 挂载一次，所有 Agent scope 继承同一 tool generation；不得按 session 建立 MCP 配置或连接副本。每次写入必须携带 document revision 并以 compare-and-swap 更新完整 server record；并发修改返回稳定 conflict，不能最后写入者覆盖。
+Host must persist GUI-managed MCP configuration in the `local-harness.mcp` DSH settings namespace; Client must not store a copy. Enabled records mount once in DSH Tool Registry's deployment-global/root layer, and all Agent scopes inherit the same tool generation; do not create per-session MCP configuration or connection copies. Every write must carry a document revision and update the complete server record through compare-and-swap; concurrent edits return a stable conflict, not last-writer-wins overwriting.
 
-生效规则固定为：
+Application rules are fixed:
 
-- 新建记录默认 `enabled=false`；所引用 credential 全部可解析后才能启用。
-- 保存成功表示配置已原子提交，不表示外部 server 已连接；运行阶段通过独立状态返回 `applying | active | error | disabled`。
-- 只重建发生变化的 DSH MCP Client fiber；其他 server 和基础工具不得中断。
-- `serverName` 变化会改变模型可见工具名，必须显示警告并要求请求携带 `acknowledgeToolRename=true`。
-- remove 只删除配置并停止该 server，不自动删除 credential reference，因为 reference 可能被其他配置共享。
-- credential 更新后只重启引用它的 server；resolved value 绝不返回 Client、Session、日志或 inventory。
-- composition MCP 与 GUI-managed MCP 的 `serverName` 冲突必须在提交前拒绝。
-- HTTP MCP 只允许 HTTPS，或 hostname 为 `localhost`/loopback IP literal 的 HTTP；URL 禁止 userinfo、query 和 fragment。重定向每跳重新校验，带 credential-bound header 时不得跨 origin 跟随。
+- New records default to `enabled=false`; enable only after all referenced credentials resolve.
+- Successful saving means configuration was atomically committed, not that the external server is connected; runtime phase is returned independently as `applying | active | error | disabled`.
+- Rebuild only changed DSH MCP Client fibers; do not interrupt other servers or built-in tools.
+- Changing `serverName` changes model-visible tool names, so display a warning and require `acknowledgeToolRename=true` in the request.
+- Removal deletes configuration and stops that server without automatically deleting credential references, which may be shared by other configurations.
+- A credential update restarts only servers referencing it; resolved values never return to Client, Session, logs, or inventory.
+- Reject `serverName` conflicts between composition MCP and GUI-managed MCP before committing.
+- HTTP MCP permits only HTTPS, or HTTP whose hostname is `localhost` or a loopback IP literal; URLs prohibit userinfo, query, and fragment components. Revalidate every redirect hop; requests with credential-bound headers must not follow cross-origin redirects.
 
-## 12. 附件、PDF 和浏览器
+## 12. Attachments, PDF, and browser
 
-### FR-070（P0）附件
+### FR-070 (P0) Attachments
 
-Composer “+” 菜单允许选择 DSH 已支持的附件。文件字节存放在 DSH Attachment Store，Session 只保存引用和元数据。
+The Composer '+' menu allows selecting attachments already supported by DSH. File bytes reside in DSH Attachment Store; Session stores only references and metadata.
 
-### FR-071（P1）PDF 预览
+### FR-071 (P1) PDF preview
 
-V1 必须保留 DSH PDF 预览。预览失败不得损坏会话，且不代表支持 PDF 编辑。
+V1 must retain DSH PDF preview. Preview failure must not damage a session and does not imply PDF editing support.
 
-### FR-072（P1）基础网页能力
+### FR-072 (P1) Basic web capabilities
 
-V1 保留 DSH `web_search`、`web_fetch` 和在系统浏览器打开链接。网络访问遵守 DSH egress/approval 设置。
+V1 retains DSH `web_search`, `web_fetch`, and opening links in the system browser. Network access follows DSH egress/approval settings.
 
-### FR-073（P2）Office/PDF 编辑
+### FR-073 (P2) Office/PDF editing
 
-Word、Excel、PDF 创建或编辑插件进入 V1.1，不是 V1 发布条件。
+Word, Excel, and PDF creation or editing plugins belong to V1.1 and are not V1 release conditions.
 
-### FR-074（P2）完整浏览器自动化
+### FR-074 (P2) Full browser automation
 
-Playwright/Computer-use、登录态、下载和页面交互进入 V1.1，不是 V1 发布条件。
+Playwright/Computer-use, authenticated state, downloads, and page interaction belong to V1.1 and are not V1 release conditions.
 
-## 13. 设置和交互入口
+## 13. Settings and interaction entry points
 
-### FR-080（P0）设置分区
+### FR-080 (P0) Settings sections
 
-设置页至少提供：
+The settings page provides at least:
 
-- Models：route、模型、reasoning、连通性测试。
-- Tools & Permissions：默认策略、workspace、network。
-- Skills：来源、启用状态和错误。
-- MCP：server、transport、连接状态和工具数。
-- Experimental：默认关闭的实验项。
-- About：版本、固定上游来源和离线第三方许可入口。
+- Models: routes, models, reasoning, and connectivity tests.
+- Tools & Permissions: default policies, workspace, and network.
+- Skills: sources, enabled state, and errors.
+- MCP: servers, transports, connection state, and tool counts.
+- Experimental: experimental options disabled by default.
+- About: versions, pinned upstream provenance, and offline third-party license access.
 
-### FR-081（P0）Composer “+” 菜单
+### FR-081 (P0) Composer '+' menu
 
-“+” 菜单至少提供：附件、Skill、MCP/工具、Goal、Plan。菜单只提供高频入口；完整配置跳转设置页。
+The '+' menu provides at least attachments, Skill, MCP/tools, Goal, and Plan. It provides frequent actions only; full configuration opens the settings page.
 
-### FR-082（P0）配置单一来源
+### FR-082 (P0) Single configuration source
 
-设置页、“+” 菜单、模型选择器和 Host 必须使用同一 DSH settings/service state。前端本地存储只允许保存非权威 UI 偏好，不得保存模型 key 或权限事实。
+The settings page, '+' menu, model selector, and Host must use the same DSH settings/service state. Frontend local storage may retain only non-authoritative UI preferences, never model keys or permission facts.
 
-### FR-083（P1）工具调用折叠
+### FR-083 (P1) Collapsible tool calls
 
-默认视图应接近 Codex 的紧凑状态展示，展开后才显示 raw arguments/output。此调整不得改变 DSH durable event 或工具执行语义。
+The default view should resemble Codex's compact status presentation, showing raw arguments/output only when expanded. This adjustment must not change DSH durable events or tool execution semantics.
 
-## 14. 更新和发布
+## 14. Updates and releases
 
-### FR-090（P0）更新策略
+### FR-090 (P0) Update policy
 
-保留 DSH updater 代码，但 Alpha 构建默认关闭自动下载和自动安装。用户显式检查时，可以查询 GitHub Release 并显示版本、说明和手动下载链接。
+Retain DSH updater code, but disable automatic downloading and installation by default in Alpha builds. On explicit user checks, the application may query GitHub Release and show version, notes, and a manual download link.
 
-### FR-091（P0）失败隔离
+### FR-091 (P0) Failure isolation
 
-更新检查失败不得阻止应用启动，也不得反复弹窗。日志不得包含 GitHub token 或系统隐私信息。
+Failed update checks must not prevent startup or repeatedly display dialogs. Logs must not contain GitHub tokens or private system information.
 
-### FR-092（P2）签名自动安装
+### FR-092 (P2) Signed automatic installation
 
-签名验证、自动下载、自动安装、回滚和强制更新进入 V1.1。
+Signature verification, automatic downloading, automatic installation, rollback, and forced updates belong to V1.1.
 
-## 15. 会话数据质量与恢复
+## 15. Session data quality and recovery
 
-### NFR-001（P0）唯一事实源
+### NFR-001 (P0) Single source of truth
 
-任何可以影响恢复后模型行为的对话或执行事实必须存在于 DSH Session。Pi 内存、SQLite FTS、React store、日志或 telemetry 不得成为补充事实源。Decision、Evidence、Artifact 等领域对象可以由领域服务拥有独立存储，但其影响模型上下文或执行恢复的稳定引用、状态变化与结果必须写入 DSH Session；领域存储不得复制 transcript 或成为隐含执行日志。
+Any conversation or execution fact that can affect model behavior after recovery must exist in DSH Session. Pi memory, SQLite FTS, React stores, logs, and telemetry must not become supplementary sources of truth. Domain objects such as Decision, Evidence, and Artifact may have independent storage owned by domain services, but their stable references, state changes, and results affecting model context or execution recovery must be written to DSH Session; domain storage must not copy transcripts or become an implicit execution log.
 
-### NFR-002（P0）追加与不可变性
+### NFR-002 (P0) Appending and immutability
 
-已提交 Session event 不得原位更新。格式变化通过新 generation 迁移，旧 generation 保留不可变。
+Committed Session events must not be updated in place. Format changes migrate through a new generation; older generations remain immutable.
 
-### NFR-003（P0）崩溃恢复
+### NFR-003 (P0) Crash recovery
 
-原始 JSONL 的不完整尾行可以丢弃；Zstd 的 torn tail 只恢复完整记录。完整 frame 的 checksum、解压或结构失败必须报告 corruption，不能静默修复。
+An incomplete trailing raw JSONL line may be discarded; a torn Zstd tail recovers only complete records. Checksum, decompression, or structural failure in a complete frame must report corruption instead of being silently repaired.
 
-### NFR-004（P0）结果未知
+### NFR-004 (P0) Unknown outcome
 
-已记录 `tool/call` 而无 `tool/result` 的副作用结果必须标为 `TOOL_OUTCOME_UNKNOWN`。系统可以建议验证，但不得自动重复执行。
+Side-effect outcomes with recorded `tool/call` but no `tool/result` must be marked `TOOL_OUTCOME_UNKNOWN`. The system may recommend verification but must not automatically repeat execution.
 
-### NFR-005（P0）索引可重建
+### NFR-005 (P0) Rebuildable index
 
-删除或损坏 SQLite 派生索引后，系统必须能只读 DSH Session 重新构建；重建前会话仍可直接打开。
+After the SQLite derived index is deleted or corrupted, the system must rebuild it by reading only DSH Session; sessions remain directly openable before rebuilding.
 
-### NFR-006（P0）持久化屏障
+### NFR-006 (P0) Durability barriers
 
-以下边界必须调用并成功完成该 Session write handle 的 `flush()`：Client 确认用户消息已接纳前、工具 body 开始前、turn 完成/Agent idle 前。`append()` 成功但 `flush()` 失败不能返回成功状态。
+The Session write handle's `flush()` must be called and complete successfully at these boundaries: before Client acknowledges user-message acceptance, before a tool body starts, and before turn completion/Agent idle. Successful `append()` followed by failed `flush()` cannot return success.
 
-## 16. 安全与隐私
+## 16. Security and privacy
 
-### NFR-010（P0）凭据
+### NFR-010 (P0) Credentials
 
-凭据只能由 DSH credential store/reference 解析。所有用户可见配置导出、Session、错误和诊断包必须经过密钥脱敏。
+Only DSH credential store/reference may resolve credentials. All user-visible configuration exports, Sessions, errors, and diagnostic bundles must redact secrets.
 
-### NFR-011（P0）网络
+### NFR-011 (P0) Network
 
-本地 route 只允许 loopback HTTP/HTTPS；云 route 必须 HTTPS。重定向后的最终 URL 也要重新校验。带 `location` 的 V1 产品 route 不得继承 Pi catalog 的 OAuth/ambient auth、系统代理凭据或任意环境 Authorization；本地无 credential route 必须真正 keyless，云 route 只能使用显式 DSH credential reference。
+Local routes permit only loopback HTTP/HTTPS; cloud routes require HTTPS. Revalidate the final URL after redirects. V1 product routes with `location` must not inherit Pi catalog OAuth/ambient auth, system proxy credentials, or arbitrary environment Authorization; local routes without credentials must be truly keyless, while cloud routes use only explicit DSH credential references.
 
 ### NFR-012（P0）Electron
 
-禁止 renderer 直接访问 Node、文件系统、shell 或 credential store。所有高权限行为通过 Host 接口和权限策略。
+The renderer is prohibited from directly accessing Node, the filesystem, shell, or credential store. All privileged behavior goes through Host interfaces and permission policies.
 
-### NFR-013（P0）插件
+### NFR-013 (P0) Plugins
 
-插件加载错误应被隔离和展示。插件声明的外部程序、网络和文件权限在首次使用时可审计。未知 manifest 字段不能扩大权限。
+Plugin load errors should be isolated and displayed. External programs, network, and file permissions declared by plugins are auditable on first use. Unknown manifest fields cannot expand permissions.
 
-### NFR-014（P0）内容日志
+### NFR-014 (P0) Content logging
 
-默认诊断日志不包含 prompt、assistant 正文、工具原始输出、文件内容或附件字节。用户主动导出完整诊断时必须明确说明范围。
+Default diagnostic logs exclude prompts, assistant content, raw tool output, file content, and attachment bytes. Explicitly describe the scope when users choose to export full diagnostics.
 
-## 17. 性能与可靠性
+## 17. Performance and reliability
 
-### NFR-020（P1）相对性能门禁
+### NFR-020 (P1) Relative performance gates
 
-在同一固定工作区和 mock provider 下，相比固定 DSH 基线：
+On the same fixed workspace and mock provider, relative to the pinned DSH baseline:
 
-- 冷启动中位数不得回退超过 15%。
-- 首个 Host 流事件到 UI 呈现的额外中位延迟不得超过 100ms。
-- 空闲内存不得回退超过 20%。
-- 1000 个历史会话的列表加载不得回退超过 15%。
+- Median cold startup must not regress by more than 15%.
+- Additional median latency from the first Host stream event to UI presentation must not exceed 100ms.
+- Idle memory must not regress by more than 20%.
+- Listing 1000 historical sessions must not regress by more than 15%.
 
-若 DSH 基线本身波动，必须附原始测量并由项目所有者判断，不得为通过门禁删除功能。
+If the DSH baseline itself fluctuates, attach raw measurements for project-owner judgment; do not remove features to pass the gates.
 
-### NFR-021（P0）有界缓存
+### NFR-021 (P0) Bounded caches
 
-Pi event reorder、stream delta、tool output preview 和 Session projection 缓冲区必须有明确上限。大输出应沿用 DSH 截断或附件/spill 策略。
+Pi event reordering, stream deltas, tool output previews, and Session projection buffers must have explicit bounds. Large output should retain DSH truncation or attachment/spill policies.
 
-### NFR-022（P0）资源清理
+### NFR-022 (P0) Resource cleanup
 
-取消、关闭会话、切换工作区和应用退出必须等待 provider、工具、Session handle 和 scoped service 清理。不得留下继续写旧 Session 的后台 promise。
+Cancellation, session closure, workspace changes, and application exit must await cleanup of providers, tools, Session handles, and scoped services. No background promise may continue writing to an old Session.
 
-## 18. 可访问性和可用性
+## 18. Accessibility and usability
 
-### NFR-030（P1）键盘操作
+### NFR-030 (P1) Keyboard operation
 
-发送、取消、打开“+”菜单、选择模型、打开设置和关闭弹窗必须可用键盘完成。审批弹窗不能把焦点留在后台页面。
+Sending, cancellation, opening the '+' menu, selecting a model, opening settings, and dismissing dialogs must be possible by keyboard. Approval dialogs must not leave focus on the background page.
 
-### NFR-031（P1）错误可行动
+### NFR-031 (P1) Actionable errors
 
-错误至少显示稳定错误码、简明原因和下一步动作。模型连接错误应区分 base URL、鉴权、模型不存在和网络失败。
+Errors display at least a stable error code, brief cause, and next action. Model connection errors should distinguish base URL, authentication, missing model, and network failures.
 
-### NFR-032（P1）状态可理解
+### NFR-032 (P1) Understandable status
 
-UI 必须区分：等待模型、流式生成、等待审批、执行工具、取消中、恢复中和空闲。不能用一个永久 spinner 覆盖所有状态。
+The UI must distinguish waiting for model, streaming, awaiting approval, executing tools, cancelling, recovering, and idle. One perpetual spinner cannot represent all states.
 
-## 19. 测试与发布验收
+## 19. Testing and release acceptance
 
-### TEST-001（P0）源码与依赖门禁
+### TEST-001 (P0) Source and dependency gates
 
-- 固定上游 hash/版本与文档一致。
-- 锁文件无浮动 Pi 版本。
-- 生产依赖图不包含 Pi Harness Session/Skills/Compaction。
-- 默认组合恰好一个 AgentFactory。
+- Pinned upstream hashes/versions match documentation.
+- The lockfile contains no floating Pi versions.
+- Production dependencies exclude Pi Harness Session/Skills/Compaction.
+- Default composition has exactly one AgentFactory.
 
-### TEST-002（P0）模型矩阵
+### TEST-002 (P0) Model matrix
 
-至少验证：
+Verify at least:
 
-1. 本地 mock OpenAI Chat Completions：文本、工具、流式、取消、错误。
-2. 本地 mock OpenAI Responses：文本、工具、流式、取消、错误。
-3. 一个真实 loopback 兼容服务的手工 smoke test。
-4. 一个真实 HTTPS OpenAI-compatible 云 route 的受控 smoke test；CI 无密钥时可跳过，但发布记录必须包含结果。
+1. Local mock OpenAI Chat Completions: text, tools, streaming, cancellation, and errors.
+2. Local mock OpenAI Responses: text, tools, streaming, cancellation, and errors.
+3. A manual smoke test of one real loopback-compatible service.
+4. A controlled smoke test of one real HTTPS OpenAI-compatible cloud route; CI may skip without a key, but release records must contain results.
 
-### TEST-003（P0）工具矩阵
+### TEST-003 (P0) Tool matrix
 
-至少覆盖：读文件、搜索、patch、shell、未知工具、schema 错误、审批 allow/deny、超时、取消、并行完成乱序、`additionalContexts` 和 `concludesTurn`。
+Cover at least file reading, search, patch, shell, unknown tools, schema errors, approval allow/deny, timeout, cancellation, out-of-order parallel completion, `additionalContexts`, and `concludesTurn`.
 
-### TEST-004（P0）会话恢复矩阵
+### TEST-004 (P0) Session recovery matrix
 
-至少覆盖：
+Cover at least:
 
-- 空闲退出后恢复。
-- assistant 流中断。
-- tool call 已记录、body 未开始。
-- body 已开始、result 未记录。
-- step 已结束、turn 未结束。
+- Recovery after exiting while idle.
+- Interrupted assistant streaming.
+- Tool call recorded, body not started.
+- Body started, result not recorded.
+- Step ended, turn not ended.
 - raw torn line。
 - Zstd torn final frame。
-- 完整 frame checksum corruption。
-- SQLite 文件丢失或损坏。
-- 同 session 第二写者竞争。
-- 自动/手工 compaction 后终止并恢复。
-- context overflow 触发一次 DSH compaction 后成功重试；压缩失败不循环。
+- Complete-frame checksum corruption.
+- Missing or corrupt SQLite files.
+- A second writer contending for the same session.
+- Termination and recovery after automatic/manual compaction.
+- Successful retry after context overflow triggers one DSH compaction; compaction failure does not loop.
 
-### TEST-005（P0）产品能力矩阵
+### TEST-005 (P0) Product capability matrix
 
-Goal、Plan、Skill、MCP、附件、PDF 预览、模型切换、设置与“+”菜单必须各有至少一个集成或桌面 E2E 用例。另必须覆盖首次模型配置、会话重命名/搜索/归档/恢复/分叉/导出、Diff、Terminal、About/许可，以及 MCP stdio/HTTP 的新增、启停、编辑、冲突、失败隔离和移除。
+Goal, Plan, Skill, MCP, attachments, PDF preview, model switching, settings, and the '+' menu must each have at least one integration or desktop E2E case. Also cover first model configuration, session rename/search/archive/restore/fork/export, Diff, Terminal, About/licenses, and MCP stdio/HTTP add, enable/disable, edit, conflicts, failure isolation, and removal.
 
-### TEST-006（P0）安全矩阵
+### TEST-006 (P0) Security matrix
 
-至少覆盖：IPC sender 拒绝、navigation/window open 拒绝、路径穿越、符号链接逃逸、远程 HTTP model route 拒绝、凭据脱敏和未授权网络工具。
+Cover at least IPC sender rejection, navigation/window-open rejection, path traversal, symlink escape, remote HTTP model-route rejection, credential redaction, and unauthorized network tools.
 
-## 20. V1 端到端验收场景
+## 20. V1 end-to-end acceptance scenarios
 
-### AC-001 本地模型完成代码修改
+### AC-001 Local model completes a code change
 
-给定一个 loopback OpenAI-compatible 模型和测试工作区，用户要求修改一个跨文件 bug。Agent 应读取文件、获得必要审批、提交 patch、运行测试并展示 diff；重启应用后同一会话完整可见且可继续。
+Given a loopback OpenAI-compatible model and a test workspace, the user requests a cross-file bug fix. The Agent should read files, obtain required approvals, apply a patch, run tests, and show the diff; after restart, the same complete session remains visible and resumable.
 
-### AC-002 云模型切换在 step 边界生效
+### AC-002 Cloud model changes take effect at step boundaries
 
-运行中修改模型设置，当前流保持原 provider/model，下一 Pi turn 使用新配置；Session 中 request header 能解释这次切换。
+Changing model settings during execution leaves the current stream on its original provider/model; the next Pi turn uses the new configuration, and the Session request header explains the change.
 
-### AC-003 工具结果未知不重放
+### AC-003 Unknown tool outcome is not replayed
 
-在副作用 shell 工具开始后强制终止 Host。恢复时出现 `TOOL_OUTCOME_UNKNOWN`，Agent 不自动再次运行命令，并提示用户验证外部状态。
+Forcefully terminate Host after a side-effecting shell tool starts. Recovery shows `TOOL_OUTCOME_UNKNOWN`; the Agent does not automatically rerun the command and prompts the user to verify external state.
 
-### AC-004 派生索引损坏不丢会话
+### AC-004 Derived-index corruption does not lose sessions
 
-在关闭应用后破坏 SQLite FTS 文件。应用重启仍可直接打开 JSONL/Zstd 会话，并能触发索引重建。
+Corrupt the SQLite FTS file after closing the application. After restart, the application can still directly open JSONL/Zstd sessions and trigger index rebuilding.
 
-### AC-005 Goal/Plan/Skill/MCP 共存
+### AC-005 Goal/Plan/Skill/MCP coexistence
 
-在一个会话中设置 Goal、进入 Plan、触发一个 filesystem Skill、调用一个 MCP tool，再退出 Plan。全部状态在恢复后正确投影，Pi 无第二份插件或计划记录。
+In one session, set a Goal, enter Plan, trigger a filesystem Skill, call an MCP tool, and exit Plan. Recovery projects all state correctly; Pi has no second plugin or plan record.
 
-### AC-006 前端无重复消息
+### AC-006 No duplicate frontend messages
 
-在高延迟流式输出、工具调用和快速切换会话场景下，每个 durable messageId 只显示一次；旧 session 的迟到 transient frame 被丢弃。
+During high-latency streaming, tool calls, and rapid session switching, each durable messageId appears once; late transient frames from old sessions are discarded.
 
-### AC-007 首次启动与模型回退
+### AC-007 First launch and model fallback
 
-干净 profile 首次启动必须打开 Models onboarding 且禁用 Send。配置无 key 的 loopback route 后可以发送；云 route 缺少 credential 时保持不可用。模型发现失败时保留用户手工填写的 model id，修正连接后无需重建会话即可使用。
+A clean profile's first launch must open Models onboarding and disable Send. Sending becomes available after configuring a keyless loopback route; a cloud route without credentials remains unavailable. Failed model discovery preserves the manually entered model ID; fixing the connection makes it usable without recreating the session.
 
-### AC-008 会话资料库闭环
+### AC-008 Complete session-library workflow
 
-用户可以重命名会话、按正文搜索、归档并从归档视图恢复、从已完成 turn 分叉、导出当前 generation；每次操作后重启应用，列表与打开结果保持一致。
+Users can rename a session, search its content, archive and restore it from archive view, fork a completed turn, and export the current generation; after each operation and application restart, listing and opening results remain consistent.
 
-### AC-009 MCP 管理闭环
+### AC-009 Complete MCP management workflow
 
-用户新增一个默认停用的 stdio server，配置 credential reference 后启用并调用工具；再新增一个 HTTP server。一个 server 连接失败时另一个及基础工具仍可用。编辑产生 revision conflict 时保留本地草稿并要求刷新；移除后对应工具消失、历史 tool event 仍可显示。
+The user adds a stdio server disabled by default, configures its credential reference, enables it, and calls a tool; then adds an HTTP server. If one server fails to connect, the other and built-in tools remain usable. A revision conflict during editing preserves the local draft and requires refresh; removal makes the corresponding tools disappear while historical tool events remain displayable.
 
-### AC-010 长会话闭环
+### AC-010 Complete long-session workflow
 
-使用小 context-window mock route 推进到自动压缩阈值，并分别测试 `/compact` 与 provider context-overflow 路径。压缩后继续一次包含工具调用的 turn，重启后模型 surface、完整审计历史和 UI projection 均一致。
+Use a small context-window mock route to reach the automatic compaction threshold, and separately test `/compact` and provider context-overflow paths. Continue with a tool-calling turn after compaction; after restart, model surface, complete audit history, and UI projection remain consistent.
 
 ## 21. Definition of Done
 
-V1 只有同时满足以下条件才完成：
+V1 is complete only when all of the following hold:
 
-- 所有 P0 需求通过，P1 延期均有项目所有者明确记录。
-- TEST-001 至 TEST-006 有可重复命令和结果。
-- AC-001 至 AC-010 有证据。
-- 没有 Pi durable session、第二个 chat DB 或前端持久 transcript。
-- Windows 11 安装包经过干净环境 smoke test。
-- 许可证、来源、设置迁移、会话格式与已知限制文档齐全。
-- 代码复审没有未解决的 P0/P1 缺陷。
+- All P0 requirements pass, and any P1 deferral has an explicit project-owner record.
+- TEST-001 through TEST-006 have reproducible commands and results.
+- AC-001 through AC-010 have evidence.
+- No Pi durable session, second chat DB, or frontend persistent transcript exists.
+- The Windows 11 installer passes a clean-environment smoke test.
+- License, provenance, settings migration, session format, and known-limitations documentation is complete.
+- Code review has no unresolved P0/P1 defects.
 
-## 22. V1.1 需求池
+## 22. V1.1 requirements pool
 
-V1.1 候选需求固定为：
+V1.1 candidate requirements are fixed:
 
-- DOC-110：Word 文档创建、编辑和渲染验证插件。
-- SHEET-110：Excel 工作簿创建、编辑、公式计算和渲染验证插件。
-- PDF-110：PDF 创建、编辑、表单和视觉检查插件。
-- BROWSER-110：Playwright 浏览器自动化及独立权限域。
-- UPDATE-110：签名自动更新、安装回滚和发布密钥流程。
-- SECURITY-110：插件签名、细粒度 capability grant、网络隔离和审计导出。
+- DOC-110: Word document creation, editing, and rendering-validation plugin.
+- SHEET-110: Excel workbook creation, editing, formula calculation, and rendering-validation plugin.
+- PDF-110: PDF creation, editing, forms, and visual-inspection plugin.
+- BROWSER-110: Playwright browser automation with an independent permission domain.
+- UPDATE-110: Signed automatic updates, installation rollback, and release-key workflow.
+- SECURITY-110: Plugin signatures, fine-grained capability grants, network isolation, and audit export.
 
-这些需求在 V1 发布前只能保留扩展接口，不能提前实现。
+Before V1 release, retain only extension interfaces for these requirements; do not implement them early.
 
-## 23. PR 追踪
+## 23. PR traceability
 
-| 需求范围 | 主要 PR |
+| Requirement scope | Primary PR |
 |---|---|
-| PLAT、FR-001–004、基础 NFR-010–014 | PR-A |
+| PLAT, FR-001–004, baseline NFR-010–014 | PR-A |
 | FR-010–019、FR-020–025、FR-030–037、FR-040–047、NFR-001–006、TEST-001–004、AC-010 | PR-B |
 | FR-050–052、FR-060–067、FR-070–074、FR-080–083、FR-090–092、NFR-020–032、TEST-005–006、AC-001–009 | PR-C |
 
-PR-C 必须建立在 PR-B 的恢复和契约测试通过之后；UI 不得通过 mock 永久绕过真实 Pi/DSH 桥接。
+PR-C must follow passing PR-B recovery and contract tests; the UI must not permanently bypass the real Pi/DSH bridge through mocks.
