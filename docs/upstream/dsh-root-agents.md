@@ -1,5 +1,7 @@
 # AGENTS.md
 
+English | [中文](dsh-root-agents.zh.md)
+
 DeepSeek Harness is an all-plugin Cordis agent harness. Read [docs/architecture.md](../../docs/architecture.md) before changing `packages/`; follow [docs/AGENTS.md](../../docs/AGENTS.md) for documentation.
 
 ## Pre-stable APIs and released Session data

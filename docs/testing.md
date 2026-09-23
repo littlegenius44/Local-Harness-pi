@@ -44,11 +44,15 @@ An e2e assertion re-runs the command or re-reads the file externally; a keyword 
 
 - Every vitest config points vite-tsconfig-paths at `tsconfig.base.json`; bare workspace imports resolve to `src` ([layout](development.md#typescript-project-layout)), never through package `exports` to built `lib/` — stale artifacts there load a second copy of module singletons. Built artifacts are consumed only explicitly: `lib`-mode subprocesses and the built smokes below.
 
+<a id="test-subprocess-launch-modes"></a>
+
 ## Test subprocess launch modes
 
 - CI and build-having test lanes run every profile or Cordis-config subprocess from built `lib/` through the shared dual-mode launcher. Do not hand-write `--import tsx` for these subprocesses.
 - Protocol and operating-system fixtures that do not load Cordis run erasable `.ts` directly with Node, without tsx or the root paths map.
 - Only a test whose subject is source-path resolution may select `src`; state that contract in the test.
+
+<a id="when-a-snapshot-test-is-required"></a>
 
 ## When a snapshot test is required
 

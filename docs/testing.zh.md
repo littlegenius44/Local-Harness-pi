@@ -44,11 +44,15 @@ e2e 断言应重新运行命令或从外部重新读取文件；对 agent 自身
 
 - 每个 vitest 配置都将 vite-tsconfig-paths 指向 `tsconfig.base.json`；工作区包的裸导入解析到 `src`（[布局](development.zh.md#typescript-project-layout)），绝不会经由包的 `exports` 解析到构建后的 `lib/`，因为其中的陈旧产物会加载第二份模块单例。构建产物只在显式指定时使用：以 `lib` 模式运行的子进程，以及下文的构建产物冒烟测试。
 
+<a id="test-subprocess-launch-modes"></a>
+
 ## 测试子进程启动模式
 
 - CI 与已有构建产物的测试通道通过共享双模式启动器，从构建后的 `lib/` 运行每个 profile 或 Cordis 配置子进程。不要为这些子进程手写 `--import tsx`。
 - 不加载 Cordis 的协议与操作系统 fixture 直接通过 Node 运行使用可擦除语法的 `.ts` 文件，不经过 tsx 或根路径映射。
 - 只有测试对象本身是源码路径解析时，才可以选择 `src`；在测试中写明这一约定。
+
+<a id="when-a-snapshot-test-is-required"></a>
 
 ## 何时需要快照测试
 
