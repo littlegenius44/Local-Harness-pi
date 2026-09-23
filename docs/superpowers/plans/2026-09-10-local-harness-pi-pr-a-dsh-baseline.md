@@ -1,33 +1,35 @@
 # PR-A DSH Baseline and Product Boundary Implementation Plan
 
+English | [中文](2026-09-10-local-harness-pi-pr-a-dsh-baseline.zh.md)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 把固定 DSH 快照导入新仓库，保留来源与内部兼容标识，完成 Local-Harness-pi 产品品牌、离线 About/第三方许可、Windows 数据隔离和 Electron 安全基线，提取行为中性的 Agent machine 构造 seam，并证明未接 Pi 时平台仍可构建运行。
+**Goal:** Import the pinned DSH snapshot into the new repository, retain provenance and internal compatibility identifiers, establish Local-Harness-pi product branding, offline About/third-party licenses, Windows data isolation, and the Electron security baseline, extract a behavior-neutral Agent machine construction seam, and prove the platform builds and runs before Pi integration.
 
-**Architecture:** 采用源码快照而非运行时多仓组合。保留 DSH npm scope、Cordis plugin id、`dsh-app` 自定义协议和 preload 内部对象名，以避免无收益的大范围改名；只改产品可见标识与桌面专用数据根。PR-A 不修改 Agent Loop 语义，只提取一个默认仍构造 `ReactLoopAgent` 的 protected machine-construction seam，供 PR-B 继承。
+**Architecture:** Use a source snapshot rather than runtime composition across repositories. Retain DSH npm scope, Cordis plugin IDs, the `dsh-app` custom protocol, and internal preload object names to avoid broad renaming without benefit; change only product-visible identity and the desktop-specific data root. PR-A does not change Agent Loop semantics; it extracts only a protected machine-construction seam that still constructs `ReactLoopAgent` by default for PR-B to inherit.
 
 **Tech Stack:** Git、pnpm workspace、TypeScript、Electron 44、Vitest、electron-builder。
 
 ---
 
-## 上游复读清单
+## Upstream rereading checklist
 
-开工前完整阅读：
+Read fully before starting:
 
-- DSH：根 `AGENTS.md`、`BRAND_GUIDELINES.md`、`docs/architecture.md`、`docs/defensive-patterns.md`、`docs/cookbook/adding-a-package.md`、`scripts/check-workspace-constraints.ts`、`scripts/client-build-environment.ts`；`apps/desktop/src/main.ts`、`host-process.ts`、`paths.ts`、`ipc.ts`、`preload.ts`、`project-manager.ts`、`update-coordinator.ts`、`electron-builder.config.mjs` 及对应 `apps/desktop/tests/*.spec.ts`；`apps/web/public/manifest.webmanifest`、`apps/web/index.html`、`packages/client/ui-brand-official`、`packages/client/ui-settings-models` 与 `packages/bundle/web-app` 的品牌、welcome、system-prompt 实现和测试；`packages/core/agent-loop/src/index.ts`、`agent.ts`、全部 lifecycle tests，以及 `packages/core/agent/src/types.ts`、`runtime-types.ts`。
-- Codex：桌面安全、设置和 Composer 入口相关实现；只参考交互与安全原则，不复制 Apache-2.0 代码。
-- Pi：本 PR 不接入运行时，只核对 `packages/agent/package.json` 的许可证和版本。
+- DSH: root `AGENTS.md`, `BRAND_GUIDELINES.md`, `docs/architecture.md`, `docs/defensive-patterns.md`, `docs/cookbook/adding-a-package.md`, `scripts/check-workspace-constraints.ts`, and `scripts/client-build-environment.ts`; `apps/desktop/src/main.ts`, `host-process.ts`, `paths.ts`, `ipc.ts`, `preload.ts`, `project-manager.ts`, `update-coordinator.ts`, `electron-builder.config.mjs`, and corresponding `apps/desktop/tests/*.spec.ts`; branding, welcome, and system-prompt implementations and tests in `apps/web/public/manifest.webmanifest`, `apps/web/index.html`, `packages/client/ui-brand-official`, `packages/client/ui-settings-models`, and `packages/bundle/web-app`; `packages/core/agent-loop/src/index.ts`, `agent.ts`, all lifecycle tests, and `packages/core/agent/src/types.ts` and `runtime-types.ts`.
+- Codex: desktop security, settings, and Composer entry implementations; reference only interaction and security principles, without copying Apache-2.0 code.
+- Pi: this PR does not integrate runtime code; verify only the license and version in `packages/agent/package.json`.
 
-## Task A1：导入固定 DSH 源码快照
+## Task A1: Import the pinned DSH source snapshot
 
 **Files:**
 
 - Modify: `README.md`
 - Modify: `AGENTS.md`
 - Create: `docs/upstream/dsh-root-agents.md`
-- Import: DSH commit `b2e3b2a0125854567a4a5fcba75782e42fe84901` 的其余 tracked files
+- Import: remaining tracked files from DSH commit `b2e3b2a0125854567a4a5fcba75782e42fe84901`
 
-- [ ] 创建分支并确认文档基线。
+- [ ] Create the branch and confirm the documentation baseline.
 
   Run:
 
@@ -37,9 +39,9 @@
   git log -1 --oneline
   ```
 
-  Expected: 工作区干净，最新提交包含已批准的设计文档。
+  Expected: clean working tree; the latest commit contains the approved design documents.
 
-- [ ] 保存 DSH 根规则副本，确保解决根文件冲突后仍可查阅完整上游约束。
+- [ ] Preserve a copy of DSH root instructions so complete upstream constraints remain accessible after resolving root-file conflicts.
 
   Run:
 
@@ -50,7 +52,7 @@
   git commit -m "docs: preserve the DSH repository rules"
   ```
 
-- [ ] 以 unrelated-history merge 导入固定 commit，保留上游历史和 MIT 来源。
+- [ ] Import the pinned commit with an unrelated-history merge, retaining upstream history and MIT provenance.
 
   Run:
 
@@ -60,9 +62,9 @@
   git merge --allow-unrelated-histories --no-commit b2e3b2a0125854567a4a5fcba75782e42fe84901
   ```
 
-  Expected: 只允许 `README.md` 和 `AGENTS.md` 出现 add/add 冲突。若还有冲突，停止导入并核对固定 commit，不做批量覆盖。
+  Expected: add/add conflicts only in `README.md` and `AGENTS.md`. If other conflicts appear, stop importing and verify the pinned commit; do not overwrite in bulk.
 
-- [ ] 对两个已知冲突保留 Local-Harness-pi 版本，然后补入上游规则链接。
+- [ ] Keep the Local-Harness-pi versions for the two known conflicts, then add upstream-instruction links.
 
   Run:
 
@@ -72,15 +74,15 @@
   git status --short
   ```
 
-  在 `AGENTS.md`“开始工作前”加入：
+  Add the following to the before-starting section of `AGENTS.md`:
 
   ```md
   5. DSH 继承代码还必须遵循 A1 创建的 `docs/upstream/dsh-root-agents.md` 固定上游根规则副本以及各子目录 `AGENTS.md`；与本文件冲突时以本文件的产品架构和删除限制为准。
   ```
 
-  Expected: 不再有 unmerged path；设计文档仍存在。
+  Expected: no unmerged paths remain; design documents still exist.
 
-- [ ] 校验导入树与来源。
+- [ ] Verify the imported tree and provenance.
 
   Run:
 
@@ -91,9 +93,9 @@
   Test-Path .\LICENSE
   ```
 
-  Expected: 第一条无输出，后三条均为 `True`。
+  Expected: no output from the first command; the next three all return `True`.
 
-- [ ] 提交导入。
+- [ ] Commit the import.
 
   Run:
 
@@ -103,7 +105,7 @@
   git commit -m "chore: import the pinned DSH source baseline"
   ```
 
-## Task A2：记录机器可校验的来源和许可证
+## Task A2: Record machine-verifiable provenance and licenses
 
 **Files:**
 
@@ -117,11 +119,11 @@
 - Modify: `pnpm-lock.yaml`
 - Test: `scripts/tests/verify-local-harness-sources.spec.ts`
 
-- [ ] 先写失败测试，要求精确 hash、Pi 版本和许可证字段。
+- [ ] First write failing tests requiring exact hashes, Pi versions, and license fields.
 
-  测试必须构造一个修改了单个 hash 的临时 manifest，并断言 verifier 以非零结果拒绝；再读取真实 manifest，断言 DSH/Pi/Codex 三项均存在。
+  Tests must create a temporary manifest with one altered hash and assert that the verifier rejects it with a nonzero result; then read the real manifest and assert all three DSH/Pi/Codex entries exist.
 
-  `source-lock.json` 的最终内容固定为：
+  The final `source-lock.json` content is fixed:
 
   ```json
   {
@@ -149,25 +151,25 @@
   }
   ```
 
-- [ ] 运行失败测试。
+- [ ] Run the failing tests.
 
   Run: `pnpm vitest run scripts/tests/verify-local-harness-sources.spec.ts`
 
-  Expected: 因 verifier 或 manifest 尚未存在而失败。
+  Expected: failure because the verifier or manifest does not yet exist.
 
-- [ ] 实现 verifier：使用 `readFile` + `JSON.parse`，逐字段比较上述常量，并读取 `packages/llm/llm-pi-ai/package.json` 与 lockfile，确认已存在的 Pi direct specifier 和 resolved version 都没有 `^`、`~`、workspace 浮动或不同版本。PR-A 允许 `pi-agent-core` 尚未出现；一旦 `packages/core/agent-loop-pi/package.json` 存在，同一 verifier 必须要求 `pi-agent-core` 和 `pi-ai` 两个 direct dependency 及 lock resolution 都精确为 `0.85.1`。verifier 还要动态扫描 `packages/*/*/package.json`：所有 `@local-harness/*` 必须 `private: true`、版本与根 `0.1.5-alpha.2` 一致、不得包含 `publishConfig`。将上游 `@earendil-works/pi-ai` 的 `^0.85.1` 改为精确 `0.85.1`，然后只更新 lockfile：
+- [ ] Implement the verifier with `readFile` + `JSON.parse`, comparing the constants above field by field and reading `packages/llm/llm-pi-ai/package.json` and the lockfile to confirm that existing Pi direct specifiers and resolved versions have no `^`, `~`, floating workspace specifiers, or differing versions. PR-A permits `pi-agent-core` to be absent; once `packages/core/agent-loop-pi/package.json` exists, the same verifier must require exact `0.85.1` direct dependencies and lock resolutions for both `pi-agent-core` and `pi-ai`. The verifier also dynamically scans `packages/*/*/package.json`: all `@local-harness/*` packages must be `private: true`, match root version `0.1.5-alpha.2`, and omit `publishConfig`. Change upstream `@earendil-works/pi-ai` from `^0.85.1` to exact `0.85.1`, then update only the lockfile:
 
   Run: `pnpm install --lockfile-only`
 
-- [ ] 调整 DSH workspace constraint 的发布边界。固定 DSH 的 `standardReleaseMemberDirectory` 只按目录判断，任何新 `packages/*/*` 都会被误当作公开 npm release member；不能直接创建 private `@local-harness/*` 包。将判断改为同时查看 manifest：
+- [ ] Adjust the DSH workspace constraint's publication boundary. The pinned DSH `standardReleaseMemberDirectory` checks only directories, incorrectly treating every new `packages/*/*` as a public npm release member, so private `@local-harness/*` packages cannot be created directly. Make the check inspect the manifest too:
 
-  - `@local-harness/*` 在普通 `packages/*/*` 目录必须 `private: true`、无 `publishConfig`、版本等于根版本，并继续接受 files/exports/project-reference 通用检查；
-  - `@deepseek-ai/dsh-*`、vendor 和现有 app 的发布策略保持原样；
-  - 其他未知 scope 不获得 private 例外，避免无意绕过发布门禁。
+  - `@local-harness/*` in ordinary `packages/*/*` directories must be `private: true`, omit `publishConfig`, match the root version, and remain subject to common files/exports/project-reference checks;
+  - Preserve publication policies for `@deepseek-ai/dsh-*`, vendor, and existing apps;
+  - Grant no private exception to unknown scopes, avoiding accidental bypass of release gates.
 
-  `scripts/check-workspace-constraints.spec.ts` 用临时 manifest 覆盖：合法 Local private 包、错误版本、缺 private、带 publishConfig，以及一个现有 DSH public member不受影响。不得通过把整个 `packages/*/*` 从扫描中排除来通过测试。
+  Temporary manifests in `scripts/check-workspace-constraints.spec.ts` cover a valid Local private package, wrong version, missing private, presence of publishConfig, and an unaffected existing DSH public member. Do not pass tests by excluding all `packages/*/*` from scanning.
 
-  `package.json` 增加：
+  Add to `package.json`:
 
   ```json
   {
@@ -177,9 +179,9 @@
   }
   ```
 
-- [ ] 写 `UPSTREAM.md`，明确 DSH 是源代码基线、Pi 是 npm 内核依赖、Codex 只作设计参考；链接三份许可证，不宣称 OpenAI 或 DeepSeek 官方产品。
+- [ ] Write `UPSTREAM.md`, identifying DSH as the source baseline, Pi as the npm kernel dependency, and Codex as design reference only; link all three licenses without claiming to be an official OpenAI or DeepSeek product.
 
-- [ ] 运行测试和门禁。
+- [ ] Run tests and gates.
 
   Run:
 
@@ -189,9 +191,9 @@
   pnpm run constraints
   ```
 
-  Expected: 全部通过。
+  Expected: all pass.
 
-- [ ] 提交。
+- [ ] Commit.
 
   Run:
 
@@ -200,7 +202,7 @@
   git commit -m "docs: lock upstream source provenance"
   ```
 
-## Task A3：建立产品可见品牌、About 和离线许可
+## Task A3: Establish product-visible branding, About, and offline licenses
 
 **Files:**
 
@@ -249,7 +251,7 @@
 - Modify: `apps/desktop/tests/windows-sign.spec.ts`
 - Test: `apps/desktop/tests/product-identity.spec.ts`
 
-- [ ] 先写产品身份测试，断言 builder 配置包含：
+- [ ] First write product identity tests asserting that builder configuration contains:
 
   ```ts
   expect(config.productName).toBe('Local-Harness-pi')
@@ -257,15 +259,15 @@
   expect(config.appId).toBe('io.localharness.pi')
   ```
 
-  同时断言 locale 的启动失败、更新标题和插件窗口标题不再包含 `DeepSeek Harness`；菜单文案包含 About 和第三方许可入口；PWA `name`/`short_name`、初始 HTML 标题、构建期 `DSH_CLIENT_TITLE`、侧栏文本、空会话标志和首次欢迎文案均为 Local-Harness-pi 产品身份。
+  Also assert that localized launch failure, update titles, and plugin-window titles no longer contain `DeepSeek Harness`; menus include About and third-party license entries; PWA `name`/`short_name`, initial HTML title, build-time `DSH_CLIENT_TITLE`, sidebar text, empty-session logo, and first welcome copy all use Local-Harness-pi product identity.
 
-- [ ] 运行测试并确认失败。
+- [ ] Run tests and confirm failure.
 
   Run: `pnpm vitest run apps/desktop/tests/product-identity.spec.ts apps/desktop/tests/locale.spec.ts`
 
-- [ ] 做最小品牌替换。
+- [ ] Make the minimal branding substitutions.
 
-  `electron-builder.config.mjs` 的品牌字段固定为：
+  Branding fields in `electron-builder.config.mjs` are fixed:
 
   ```js
   productName: 'Local-Harness-pi',
@@ -273,23 +275,23 @@
   win: { /* 保留本任务定义的其他字段 */, icon: 'build/icon.svg' },
   ```
 
-  `apps/desktop/scripts/desktop-release-environment.mjs` 导出 `DEFAULT_DESKTOP_APP_ID = 'io.localharness.pi'`。`resolveDesktopAppId({})` 返回该值；若 `DSH_DESKTOP_APP_ID` 存在但不等于该值则失败，避免 CI 意外生成另一个应用身份。保留 `DSH_DESKTOP_APP_ID` 变量名只为兼容现有 release 脚本。`macos-signature.spec.ts` 同步覆盖默认值、相同显式值和不一致显式值三种情况。
+  Export `DEFAULT_DESKTOP_APP_ID = 'io.localharness.pi'` from `apps/desktop/scripts/desktop-release-environment.mjs`. `resolveDesktopAppId({})` returns it; a present but different `DSH_DESKTOP_APP_ID` fails, preventing CI from accidentally generating another application identity. Retain the variable name only for existing release-script compatibility. Update `macos-signature.spec.ts` to cover the default, identical explicit value, and mismatched explicit value.
 
-  locale 和插件管理器用户可见文本统一用 `Local-Harness-pi`。将 `scripts/client-build-environment.ts` 的 official `DSH_CLIENT_TITLE` 改为 `Local-Harness-pi`，同步更新它的单元测试和 `dev-web.spec.ts`；保留环境变量名 `DSH_CLIENT_TITLE`，只改值。`apps/web/index.html` 与 `vite.config.ts` 的无环境 fallback 也固定为 `Local-Harness-pi`，防止首帧或非 official 开发构建短暂显示旧名。
+  Use `Local-Harness-pi` consistently in localized and plugin-manager user-facing text. Change official `DSH_CLIENT_TITLE` in `scripts/client-build-environment.ts` to `Local-Harness-pi`, updating its unit test and `dev-web.spec.ts`; retain the environment-variable name and change only its value. Fix the no-environment fallback in `apps/web/index.html` and `vite.config.ts` to `Local-Harness-pi` too, preventing the old name from flashing in the first frame or unofficial development builds.
 
-  `manifest.webmanifest` 固定 `name: "Local-Harness-pi"`、`short_name: "LH-pi"`。`apps/desktop/build/icon.svg` 是唯一主图：`viewBox="0 0 32 32"`，深色圆角方形底、白色 L 与 π 几何 path、蓝色右上角圆点，所有字形只用 `path/rect/circle`，不得用 `<text>` 或运行时字体。`apps/web/public/favicon.svg` 与主图字节一致；不得复制或描摹 DSH/OpenAI/Pi 官方图形资产。产品身份测试比较两文件 SHA-256，断言 SVG 无 `text/image/use/script` 元素且不含 DSH 原 `FISH_LOGO_PATH`；Windows unpacked/NSIS smoke 必须证明 electron-builder 从该 SVG 生成非默认 Electron 图标。
+  Fix `manifest.webmanifest` to `name: "Local-Harness-pi"` and `short_name: "LH-pi"`. `apps/desktop/build/icon.svg` is the single master image: `viewBox="0 0 32 32"`, a dark rounded-square background, white geometric L and π paths, and a blue upper-right dot. Glyphs use only `path/rect/circle`, never `<text>` or runtime fonts. `apps/web/public/favicon.svg` must be byte-identical; do not copy or trace official DSH/OpenAI/Pi artwork. Product identity tests compare both files' SHA-256 and assert no `text/image/use/script` elements or original DSH `FISH_LOGO_PATH`; Windows unpacked/NSIS smoke tests must prove electron-builder generates a non-default Electron icon from this SVG.
 
-  现有 `@deepseek-ai/dsh-client-ui-brand-official` 包名为上游兼容标识，不重命名包；但其浏览器实现改为 Local-Harness-pi occupant：侧栏 name 渲染文本 `Local-Harness-pi`，侧栏 mark 与 `conversation.hero.brand.mark` 都渲染同一中性 `LHπ` SVG。`src/client/index.ts` 必须把 hero slot 加入同一组声明感知注册，teardown/HMR 时三个 occupant 一并移除。测试断言三个 slot 都注册、文本/`aria-label` 正确、mark 不再 import 或渲染 `FishLogo`/`BrandWordmark`，并继续覆盖“声明在 apply 前/后”两种顺序。
+  Keep the existing `@deepseek-ai/dsh-client-ui-brand-official` package name as an upstream compatibility identifier, but change its browser implementation to a Local-Harness-pi occupant: the sidebar name renders `Local-Harness-pi`, and both sidebar mark and `conversation.hero.brand.mark` render the same neutral `LHπ` SVG. `src/client/index.ts` must include the hero slot in the same declaration-aware registrations; teardown/HMR removes all three occupants together. Tests assert all three slots register, text/`aria-label` are correct, marks no longer import or render `FishLogo`/`BrandWordmark`, and both declaration-before-apply and declaration-after-apply orders remain covered.
 
-  首次欢迎页的中英文文案改为 Local-Harness-pi Alpha 声明，必须包含“built on DeepSeek Harness”、非 OpenAI/DeepSeek 官方产品、仅支持 OpenAI-compatible provider、数据默认保存在本机四项事实；同步更新 welcome notice 测试与 Web expected fixture。
+  Change English and Chinese first-welcome copy to the Local-Harness-pi Alpha notice, including four facts: built on DeepSeek Harness, not an official OpenAI/DeepSeek product, only OpenAI-compatible providers supported, and data stored locally by default. Update welcome-notice tests and the Web expected fixture.
 
-  Web profile 的 `system-prompt` 行显式设置 `includeHarnessIdentity: false`，保留当前 `personaSuffix`，并把 `personaPrefix` 固定为 `You are the Local-Harness-pi coding agent powered by the {{model}} model.`。`packages/bundle/web-app/src/index.ts` 的模型可见 Web GUI 文案改为 `Local-Harness-pi Web GUI (built on DeepSeek Harness)`；`DSH_WEB_URL` 变量名继续保留。同步更新 `web-app.spec.ts` 和 Web runtime expected fixture，证明最终 prompt 只出现新的当前产品身份且没有默认 `You are an AI agent powered by DeepSeek Harness.` 句子。
+  Explicitly set `includeHarnessIdentity: false` on the Web profile's `system-prompt` row, preserve its current `personaSuffix`, and fix `personaPrefix` to `You are the Local-Harness-pi coding agent powered by the {{model}} model.`. Change model-visible Web GUI copy in `packages/bundle/web-app/src/index.ts` to `Local-Harness-pi Web GUI (built on DeepSeek Harness)`; retain `DSH_WEB_URL`. Update `web-app.spec.ts` and the Web runtime expected fixture to prove the final prompt contains only the new current-product identity and excludes the default `You are an AI agent powered by DeepSeek Harness.` sentence.
 
-  不得全仓替换 `DeepSeek Harness`。以下内容原样保留：`@deepseek-ai/dsh-*` 包名和 package description、Cordis plugin id、`dsh-app` scheme、`window.dshDesktop`、`DSH_*` 环境变量、Session/remote event type、CLI 可执行名 `dsh`、上游源码文档/测试语料，以及 About/notice 中真实的上游归属。`UPSTREAM.md` 增加一段品牌边界说明并引用固定快照的 `BRAND_GUIDELINES.md`。
+  Do not replace `DeepSeek Harness` across the repository. Preserve `@deepseek-ai/dsh-*` package names and descriptions, Cordis plugin IDs, `dsh-app`, `window.dshDesktop`, `DSH_*` environment variables, Session/remote event types, the `dsh` CLI executable, upstream source documentation/test corpora, and accurate upstream attribution in About/notices. Add a branding-boundary paragraph to `UPSTREAM.md` referring to the pinned snapshot's `BRAND_GUIDELINES.md`.
 
-- [ ] 把 Windows Alpha 打包收缩为未签名的手工安装流。在 `electron-builder.config.mjs` 的 Windows 分支不再调用 `createWindowsTokenSigner()`/`installWindowsNsisBootstrapSigner()`，固定 `win.forceCodeSigning=false`，保留 `target: ['nsis']`、`oneClick=false` 和可选安装目录。签名脚本保留但 V1 组合不可达；`windows-sign.spec.ts` 必须断言无证书环境也能生成 config、不安装 signer hook，且 NSIS target 仍存在。发布说明必须提示 Windows SmartScreen 可能警告；不得宣称该 Alpha 已签名。
+- [ ] Limit Windows Alpha packaging to unsigned manual installation. The Windows branch of `electron-builder.config.mjs` must not call `createWindowsTokenSigner()`/`installWindowsNsisBootstrapSigner()`; set `win.forceCodeSigning=false` while retaining `target: ['nsis']`, `oneClick=false`, and selectable installation directory. Keep signing scripts unreachable from V1 composition; `windows-sign.spec.ts` asserts configuration works without certificates, no signer hook installs, and the NSIS target remains. Release notes must mention possible Windows SmartScreen warnings and must not claim the Alpha is signed.
 
-- [ ] 写入离线 notice，测试必须逐项查找以下精确身份：
+- [ ] Write offline notices; tests must locate each exact identity below:
 
   ```text
   DeepSeek Harness
@@ -306,11 +308,11 @@
   Apache License 2.0
   ```
 
-  DSH/Pi 段落后附它们仓库中的完整 MIT license text。Codex 段只说明设计参考和链接，不把 Codex 加入分发组件清单。
+  Append complete MIT license texts from the DSH/Pi repositories after their sections. The Codex section states only design reference and links; do not add Codex to distributed components.
 
-- [ ] 创建唯一共享的产品元数据包 `@local-harness/product-identity`，其 public export 固定为：
+- [ ] Create the sole shared product metadata package `@local-harness/product-identity`, with fixed public exports:
 
-  为避免一次无产品价值的全 workspace 版本改写，V1 Alpha 直接继承固定 DSH 基线已一致的 `0.1.5-alpha.2`。该包是 `@local-harness/*` private workspace member，不进入 DSH npm release family；A2 增加的 Local verifier 单独要求它与根版本一致并禁止 publish。
+  To avoid a workspace-wide version rewrite without product value, V1 Alpha inherits the pinned DSH baseline's already-consistent `0.1.5-alpha.2`. This package is a private `@local-harness/*` workspace member outside the DSH npm release family; the A2 Local verifier independently enforces root-version equality and prohibits publication.
 
   ```ts
   export const productIdentity = Object.freeze({
@@ -326,29 +328,29 @@
   export const thirdPartyNotices: string
   ```
 
-  `thirdPartyNotices` 必须与 `apps/desktop/resources/THIRD_PARTY_NOTICES.txt` 字节一致。测试同时读取根 `package.json`、`apps/cli/package.json`、`apps/desktop/package.json`、`apps/desktop-host/package.json`、`apps/desktop/scripts/desktop-release-environment.mjs`、`docs/upstream/source-lock.json` 和这两个 export，拒绝产品/release-family version、app ID、commit、Pi version、license 或 notice 字节漂移。该包是 Host-only 权威源：Electron About 直接 import；Web About 只读取 C2 定义的脱敏 Remote 投影，不把此 Host package 加进 Client aggregate，也不在 Client 重写一份常量。
+  `thirdPartyNotices` must be byte-identical to `apps/desktop/resources/THIRD_PARTY_NOTICES.txt`. Tests read root `package.json`, `apps/cli/package.json`, `apps/desktop/package.json`, `apps/desktop-host/package.json`, `apps/desktop/scripts/desktop-release-environment.mjs`, `docs/upstream/source-lock.json`, and both exports, rejecting drift in product/release-family versions, app ID, commit, Pi version, license, or notice bytes. This package is the Host-only authority: Electron About imports it directly; Web About reads only the redacted Remote projection defined in C2. Do not add this Host package to the Client aggregate or duplicate constants in Client.
 
-  包放在现有 `packages/util/product-identity` group，manifest 为 private ESM，版本 `0.1.5-alpha.2`；按 DSH util package 模板加入 README/README.i18n，Model Experience 写明零直接模型上下文。`tsconfig.base.json` 增加 `@local-harness/product-identity` 精确 source alias，`tsconfig.host.json` 增加 project reference，禁止同时加入 `tsconfig.client.json`。`apps/desktop/package.json` 增加 `"@local-harness/product-identity": "workspace:*"`，运行 `pnpm install` 和 `pnpm run doc-sync`；生成的 `README.zh.md` 必须一起提交。`main.ts` 的 About detail 必须 import 该包。
+  Place the package in the existing `packages/util/product-identity` group with a private ESM manifest and version `0.1.5-alpha.2`; add README/README.i18n using the DSH util template and state zero direct model context in Model Experience. Add the exact source alias `@local-harness/product-identity` to `tsconfig.base.json` and a project reference to `tsconfig.host.json`, never also to `tsconfig.client.json`. Add `"@local-harness/product-identity": "workspace:*"` to `apps/desktop/package.json`, run `pnpm install` and `pnpm run doc-sync`, and commit generated `README.zh.md` together. About detail in `main.ts` must import this package.
 
-- [ ] 把 notice 加入 electron-builder `extraResources`：
+- [ ] Add notices to electron-builder `extraResources`:
 
   ```js
   { from: resolve(root, 'resources/THIRD_PARTY_NOTICES.txt'), to: 'THIRD_PARTY_NOTICES.txt' },
   ```
 
-  若配置文件已有等价 root 变量，复用现有变量；不得从当前工作目录推导路径。同步更新 macOS/Windows builder 测试，断言 runtime、seed、notice 三项都存在，不用数组下标假定未来顺序。
+  Reuse an equivalent root variable already in the config; do not derive paths from cwd. Update macOS/Windows builder tests to assert runtime, seed, and notices are all present without assuming array positions.
 
-- [ ] 在现有 Application 菜单中加入 About。`main.ts` 使用 `app.getVersion()`、固定 DSH commit 与 Pi `0.85.1` 形成只读 detail；按钮固定为“关闭”和“第三方许可”。选择许可后只允许 `shell.openPath(join(process.resourcesPath, 'THIRD_PARTY_NOTICES.txt'))`，开发模式改用仓库内 `apps/desktop/resources/THIRD_PARTY_NOTICES.txt`。打开失败显示可行动错误，不接受 renderer 传入路径。
+- [ ] Add About to the existing Application menu. `main.ts` creates read-only detail from `app.getVersion()`, the pinned DSH commit, and Pi `0.85.1`; buttons are Close and Third-party licenses. License selection may only call `shell.openPath(join(process.resourcesPath, 'THIRD_PARTY_NOTICES.txt'))`, using repository `apps/desktop/resources/THIRD_PARTY_NOTICES.txt` in development. Display an actionable error if opening fails; accept no renderer-supplied path.
 
-  About detail 必须包含：产品版本、DSH commit、Pi version、`Local-Harness-pi is not an official OpenAI or DeepSeek product.`。将路径选择和 detail 组装提取为 export 纯函数，以便 `product-identity.spec.ts` 不启动 Electron 也能验证。
+  About detail must contain product version, DSH commit, Pi version, and `Local-Harness-pi is not an official OpenAI or DeepSeek product.`. Extract path selection and detail assembly into exported pure functions so `product-identity.spec.ts` can verify them without starting Electron.
 
-- [ ] 运行聚焦测试。
+- [ ] Run focused tests.
 
   Run: `pnpm vitest run apps/desktop/tests/product-identity.spec.ts apps/desktop/tests/locale.spec.ts apps/desktop/tests/windows-sign.spec.ts apps/desktop/tests/macos-signature.spec.ts scripts/client-build-environment.client.spec.ts scripts/dev-web.spec.ts packages/client/ui-brand-official/tests/browser-plugin.client.spec.tsx packages/client/ui-settings-models/tests/welcome-notice.client.spec.tsx packages/bundle/web-app/tests/web-app.spec.ts apps/web/tests/pwa-manifest.e2e.ts`
 
-  Expected: 全部通过。
+  Expected: all pass.
 
-- [ ] 提交。
+- [ ] Commit.
 
   Run:
 
@@ -357,7 +359,7 @@
   git commit -m "feat: apply the Local-Harness-pi desktop identity and notices"
   ```
 
-## Task A4：把桌面 DSH_HOME 隔离到 Electron userData
+## Task A4: Isolate desktop DSH_HOME under Electron userData
 
 **Files:**
 
@@ -368,34 +370,34 @@
 - Modify: `apps/desktop/tests/project-manager.spec.ts`
 - Test: `apps/desktop/tests/paths.spec.ts`
 
-- [ ] 先写失败测试：`resolveDesktopPaths('C:\\Users\\dev\\AppData\\Roaming\\Local-Harness-pi\\harness')` 的 profile、sessions 依赖根和 pnpm 状态都必须位于该根；Host spawn env 必须包含同一路径的 `DSH_HOME`。
+- [ ] First write failing tests: profile, session dependency root, and pnpm state from `resolveDesktopPaths('C:\\Users\\dev\\AppData\\Roaming\\Local-Harness-pi\\harness')` must all reside under that root; Host spawn environment must contain the same `DSH_HOME` path.
 
-- [ ] 运行失败测试。
+- [ ] Run the failing tests.
 
   Run: `pnpm vitest run apps/desktop/tests/paths.spec.ts apps/desktop/tests/host-process.spec.ts`
 
-- [ ] 在 `main.ts` 只计算一次根路径：
+- [ ] Compute the root path only once in `main.ts`:
 
   ```ts
   const harnessHome = join(app.getPath('userData'), 'harness')
   const paths = resolveDesktopPaths(harnessHome)
   ```
 
-  `DesktopHostProcess` 构造函数增加 `harnessHome: string`，spawn env 增加：
+  Add `harnessHome: string` to the `DesktopHostProcess` constructor and add to the spawn environment:
 
   ```ts
   DSH_HOME: this.harnessHome,
   ```
 
-  `startHost()` 的活动和 health-check 路径全部传同一个 `harnessHome`。不得从 renderer 或 settings 接受该路径。
+  Pass the same `harnessHome` to every active and health-check path in `startHost()`. Do not accept this path from the renderer or settings.
 
-- [ ] 验证开发模式覆盖仍只影响 project directory，不改变 DSH_HOME；验证两个桌面实例不能指向两个 home 后再共享一个 session writer。
+- [ ] Verify that development overrides affect only the project directory, not DSH_HOME; verify two desktop instances cannot select different homes and then share a session writer.
 
-- [ ] 运行测试。
+- [ ] Run tests.
 
   Run: `pnpm vitest run apps/desktop/tests/paths.spec.ts apps/desktop/tests/host-process.spec.ts apps/desktop/tests/project-manager.spec.ts`
 
-- [ ] 提交。
+- [ ] Commit.
 
   Run:
 
@@ -404,7 +406,7 @@
   git commit -m "feat: isolate desktop data under Electron userData"
   ```
 
-## Task A5：把 Electron 安全选项变成可回归测试的纯配置
+## Task A5: Extract Electron security options into regression-testable pure configuration
 
 **Files:**
 
@@ -412,7 +414,7 @@
 - Modify: `apps/desktop/src/main.ts`
 - Test: `apps/desktop/tests/window-options.spec.ts`
 
-- [ ] 先写失败测试，覆盖主窗口和插件窗口：
+- [ ] First write failing tests covering the main and plugin windows:
 
   ```ts
   expect(options.webPreferences).toMatchObject({
@@ -424,13 +426,13 @@
   expect(options.webPreferences?.preload).toBe(preload)
   ```
 
-  另断言没有 `allowRunningInsecureContent`、`webviewTag` 或远程模块开关。
+  Also assert absence of `allowRunningInsecureContent`, `webviewTag`, and remote-module switches.
 
-- [ ] 运行失败测试。
+- [ ] Run the failing tests.
 
   Run: `pnpm vitest run apps/desktop/tests/window-options.spec.ts`
 
-- [ ] 把现有 BrowserWindow options 原样提取为纯函数：
+- [ ] Extract existing BrowserWindow options unchanged into a pure function:
 
   ```ts
   export function desktopWindowOptions(preload: string): BrowserWindowConstructorOptions {
@@ -451,13 +453,13 @@
   }
   ```
 
-  `main.ts` 用 `new BrowserWindow(desktopWindowOptions(preload))`，保留拒绝 `window.open` 和非 `dsh-app:` navigation 的监听器。
+  `main.ts` uses `new BrowserWindow(desktopWindowOptions(preload))`, retaining listeners that reject `window.open` and non-`dsh-app:` navigation.
 
-- [ ] 运行测试。
+- [ ] Run tests.
 
   Run: `pnpm vitest run apps/desktop/tests/window-options.spec.ts apps/desktop/tests/host-protocol.spec.ts apps/desktop/tests/single-instance.spec.ts`
 
-- [ ] 提交。
+- [ ] Commit.
 
   Run:
 
@@ -466,7 +468,7 @@
   git commit -m "test: lock the Electron security baseline"
   ```
 
-## Task A6：提取 DSH Agent machine 构造 seam
+## Task A6: Extract the DSH Agent machine construction seam
 
 **Files:**
 
@@ -476,13 +478,13 @@
 - Modify: `packages/core/agent-loop/README.zh.md`
 - Modify when required by doc-sync: `packages/core/agent-loop/README.i18n.yaml`
 
-- [ ] 完整执行 [Agent Machine Seam 整改计划](2026-09-18-agent-machine-seam-rectification.md) 的 Task R1。先以测试子类证明 create/resume 都经过构造 seam，默认路径仍返回 `ReactLoopAgent`。
+- [ ] Execute Task R1 of the [Agent Machine Seam Rectification Plan](2026-09-18-agent-machine-seam-rectification.md) completely. First prove with a test subclass that create/resume both pass through the construction seam and the default path still returns `ReactLoopAgent`.
 
-- [ ] 增加 `AgentLoopMachine extends Agent`（唯一额外成员为 DSH lifecycle 所需的 `scope`）和 `AgentMachineCreateInput`；在 `AgentLoop` 中增加 protected `createMachine()`，把唯一 `new ReactLoopAgent(...)` 调用改为该 hook。
+- [ ] Add `AgentLoopMachine extends Agent` (its sole extra member is `scope`, required by DSH lifecycle) and `AgentMachineCreateInput`; add protected `createMachine()` to `AgentLoop`, replacing the sole `new ReactLoopAgent(...)` call with that hook.
 
-- [ ] 禁止开放或覆盖 `prepare()`、`setupAndPublish()`、`createAgent()`、`resume()`、write ownership、registry 发布或 rollback；PR-A 默认 composition 与运行行为不变。
+- [ ] Do not expose or override `prepare()`, `setupAndPublish()`, `createAgent()`, `resume()`, write ownership, registry publication, or rollback; PR-A default composition and runtime behavior remain unchanged.
 
-- [ ] 运行聚焦门禁并提交。
+- [ ] Run focused gates and commit.
 
   ```powershell
   pnpm vitest run packages/core/agent-loop/tests
@@ -494,20 +496,20 @@
   git commit -m "refactor: expose DSH agent machine construction seam"
   ```
 
-  若 doc-sync 未修改 `README.i18n.yaml`，从 `git add` 参数中省略该文件。
+  Omit `README.i18n.yaml` from `git add` arguments if doc-sync did not modify it.
 
-## Task A7：建立 PR-A 基线证据并提交 Draft PR
+## Task A7: Establish PR-A baseline evidence and submit a Draft PR
 
 **Files:**
 
 - Modify: `README.md`
 - Create: `.agents/notes/architecture/2026-09-10-local-harness-pi-source-baseline.md`
 
-- [ ] README 改为完整项目入口，保留四份权威设计文档链接，增加“内部 `dsh` 标识是上游兼容标识，不是第二个产品”的说明。
+- [ ] Make README a complete project entry, retaining links to the four authoritative design documents and explaining that internal `dsh` identifiers are upstream compatibility identifiers, not a second product.
 
-- [ ] Agent Note 记录：为什么用固定 DSH merge、为什么不批量重命名 npm scope/protocol/event、桌面数据根如何传给 Host、回滚边界。
+- [ ] Record in an Agent Note why the pinned DSH merge is used, why npm scope/protocol/events are not renamed in bulk, how the desktop data root reaches Host, and rollback boundaries.
 
-- [ ] 运行聚焦和仓库门禁。
+- [ ] Run focused and repository gates.
 
   Run:
 
@@ -521,9 +523,9 @@
   pnpm run build:desktop
   ```
 
-  Expected: 全部通过。若上游自身在固定 Windows 环境有已知失败，必须给出未改基线与当前分支的同命令对比，不得删测试。
+  Expected: all pass. For known upstream failures in the fixed Windows environment, provide results of the same command on the unmodified baseline and current branch; do not delete tests.
 
-- [ ] 检查 staged diff 并提交文档证据。
+- [ ] Review the staged diff and commit documentation evidence.
 
   Run:
 
@@ -534,7 +536,7 @@
   git commit -m "docs: record the Local-Harness-pi source baseline"
   ```
 
-- [ ] 推送并创建 Draft PR。没有经确认的 `origin` 时只停在本步骤，不影响前面本地完成状态。
+- [ ] Push and create a Draft PR. Without a confirmed `origin`, stop only at this step; earlier local completion remains valid.
 
   Run:
 
@@ -543,11 +545,11 @@
   gh pr create --draft --title "feat: establish the Local-Harness-pi DSH baseline" --body-file .\.github\pull_request_template.md
   ```
 
-  PR 描述补入实际测试结果，不声称 Pi 已接入。
+  Include actual test results in the PR description without claiming Pi integration.
 
-## PR-A 工期与交接门禁
+## PR-A effort and handoff gates
 
-- 预计净工作量：5–6 个工作日，约 0.7–1.0 个 GPT-5.6 Sol Plus 完整周额度。
-- Day 1：A1；Day 2–3：A2–A3（包含 Web/模型身份、品牌资产和 About）；Day 4：A4–A5；Day 5：A6 seam 与 lifecycle 回归；Day 6 作为 Windows/build 修复和 A7 余量。
-- 可提前结束条件：A1–A6 全部提交、A7 门禁全绿、unpacked artifact 内存在 notice、Draft PR 已发布。
-- 不可顺延到 PR-B：来源锁、产品身份、About/许可、独立 `DSH_HOME`、Electron 安全配置。它们任一失败都阻断 PR-A。
+- Estimated net effort: 5–6 working days, approximately 0.7–1.0 full GPT-5.6 Sol Plus weekly quotas.
+- Day 1: A1; days 2–3: A2–A3 (including Web/model identity, brand assets, and About); day 4: A4–A5; day 5: A6 seam and lifecycle regression; day 6 provides Windows/build fixes and A7 margin.
+- Early completion requires A1–A6 committed, all A7 gates passing, notices present in the unpacked artifact, and a published Draft PR.
+- Provenance locks, product identity, About/licenses, isolated `DSH_HOME`, and Electron security cannot be deferred to PR-B. Failure of any one blocks PR-A.
