@@ -42,3 +42,13 @@ Desktop seed content copies exclude version-root SQLite indexes from bulk copyin
 ## Risks
 
 Unsigned Alpha installers can trigger operating-system trust prompts. Inherited macOS and upload scripts do not make those release paths supported for this fork. Product identity and isolated data directories do not establish Pi execution, Markdown task completion, or the full V1 acceptance result.
+
+## Verification checkpoint: 2026-09-24
+
+The current source completed the official build and produced 265 DSH package archives plus the private desktop Host, vendor dependencies, and native entry package. The rebuilt seed passed offline installation. The unpacked artifact's agent-loop archive matches the newly packed archive byte for byte and contains the protected machine construction hook.
+
+The unsigned Windows NSIS installer built successfully: 193,520,733 bytes, SHA-256 `D84D956207A7497C7EA7A68F78BB0FE176601C33FD4C7FE7AAB20BE68E7FF877`. Its signing status is NotSigned. Packaging still uses the local short-path staging workaround; clean-machine installation and uninstallation remain unqualified.
+
+The documentation aggregate reports 15 passing checks and one failing translation-pairing check. The remaining unpaired documents are the master plan, PR-B plan, PR-C plan, and overall design; Chinese root README links also require locale alignment. The upstream instructions, requirements, interface contracts, recovery specification, and PR-A plan have paired counterparts. This checkpoint does not complete PR-A or start PR-B.
+
+A fresh isolated profile launched the latest unpacked application in 494,547 ms (about 8 minutes 15 seconds), then advanced from the welcome notice to API-key onboarding. Assertions confirmed product name, sandbox, context isolation, disabled Node integration, and web security. No credential was entered or model request sent. This verifies startup and onboarding navigation, not acceptable startup performance, installer installation/uninstallation, or model execution.
