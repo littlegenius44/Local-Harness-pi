@@ -2,6 +2,8 @@
 
 English | [中文](interface-contracts.zh.md)
 
+Fences marked `ts design` are planned implementation excerpts checked for syntax only, not available APIs. Their omitted host dependencies must be wired and pass source typechecking and contract tests in the owning implementation task.
+
 Document version: 1.2
 
 Contract version: `1`
@@ -43,7 +45,7 @@ Dependency-rule tests are recommended to enforce this boundary.
 
 These definitions express semantics; implementations should prefer existing DSH branded types:
 
-```ts
+```ts design
 export type ProtocolVersion = 1
 
 export type SessionId = string & { readonly __brand: 'SessionId' }
@@ -79,11 +81,11 @@ Constraints:
 
 `KernelDriver` is the minimal seam for replacing the conversational tool-loop kernel. It defines no Session, model settings, Tool Registry, UI, general agent graph, multi-agent orchestration, or arbitrary background workflow. Its public interface directly reuses canonical DSH message types without creating a Local Harness message IR:
 
-```ts
+```ts design
 import type { ContentBlock, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
 ```
 
-```ts
+```ts design
 export type KernelId = 'pi'
 
 export interface KernelDescriptor {
@@ -172,7 +174,7 @@ V1 fixes `PiKernelDriver.descriptor.id` to `pi`. Configuration must not expose a
 
 Kernel events use product terminology. Raw Pi events exist only inside `PiKernelDriver`:
 
-```ts
+```ts design
 export type KernelEvent =
   | { readonly type: 'run.started'; readonly runId: RunId }
   | { readonly type: 'step.started'; readonly position: TurnPosition }
@@ -260,7 +262,7 @@ Pi `Agent.subscribe()` must use an async listener. The lower-level observational
 
 DSH `AgentLoop` remains the sole `AgentFactory` lifecycle implementation. PR-A adds this behavior-neutral seam to the pinned baseline; the default still creates `ReactLoopAgent`:
 
-```ts
+```ts design
 import type { Scope } from '@deepseek-ai/dsh-scope'
 
 export interface AgentLoopMachine extends Agent {
@@ -283,7 +285,7 @@ export class AgentLoop extends Service implements AgentFactory {
 
 The Pi package subclasses it and overrides only this construction point:
 
-```ts
+```ts design
 export class PiAgentLoop extends AgentLoop {
   protected override createMachine(input: AgentMachineCreateInput): AgentLoopMachine {
     return new DshPiAgent(input.ctx, input.id, input.options, input.session)
@@ -315,7 +317,7 @@ Failure at any step requires reverse-order cleanup. Any started created notifica
 
 ## 8. DshPiAgent contract
 
-```ts
+```ts design
 export class DshPiAgent implements DshAgent {
   readonly id: SessionId
   readonly session: Session
@@ -349,7 +351,7 @@ Behavior requirements:
 
 Produce an immutable `PreparedKernelStep` before each Pi turn:
 
-```ts
+```ts design
 export interface PreparedKernelStep {
   readonly position: TurnPosition
   readonly admittedMessages: readonly UserMessage[]
@@ -390,7 +392,7 @@ Cancellation during asynchronous preparation must not leave a spurious `step/sta
 
 Only this port writes kernel execution facts into DSH Session:
 
-```ts
+```ts design
 export interface SessionCommitPort {
   startTurn(turn: number): SessionSeq
   startStep(position: TurnPosition): SessionSeq
@@ -442,7 +444,7 @@ Port requirements:
 
 Configuration continues to use DSH `llm-pi-ai` settings. The normalized V1 structure is:
 
-```ts
+```ts design
 export interface OpenAiCompatibleRoute {
   readonly id: string
   readonly displayName: string
@@ -487,7 +489,7 @@ Validation:
 
 Model routes and `streamable-http` MCP must use `@local-harness/guarded-fetch`, not independently implement redirect, DNS, or proxy rules. This Host-only mechanism package depends on neither Pi, the MCP SDK, DSH Session, nor Client:
 
-```ts
+```ts design
 export interface GuardedFetchPolicy {
   readonly destination: 'loopback' | 'https'
   readonly credentialBound: boolean
@@ -515,7 +517,7 @@ When calling `snapshot.models.streamSimple()`, the Pi adapter supplies the handl
 
 ## 12. DshModelStreamBridge
 
-```ts
+```ts design
 export interface DshModelStreamBridge {
   resolve(
     agent: DshAgent,
@@ -567,7 +569,7 @@ Each converter must have round-trip fixtures covering at least Unicode, empty st
 
 ## 14. DshToolBridge
 
-```ts
+```ts design
 export interface DshToolCall {
   readonly callId: ToolCallId
   readonly name: string
@@ -601,7 +603,7 @@ export interface DshToolBridge {
 
 `execute()` must call:
 
-```ts
+```ts design
 ctx.tools.execute({
   callId,
   name,
@@ -628,7 +630,7 @@ This prevents Pi's default convenience contract that failures must throw from sw
 
 ## 15. Parallel tools and commit reordering
 
-```ts
+```ts design
 export interface ToolCommitBuffer {
   register(call: DshToolCall, callSeq: SessionSeq): void
   settleExecution(result: DshToolBridgeResult): void
@@ -655,7 +657,7 @@ Rules:
 
 Approval does not enter KernelDriver. The DSH Tools pipeline is its sole owner:
 
-```ts
+```ts design
 export type ApprovalDecision =
   | { readonly kind: 'allowed-once' }
   | { readonly kind: 'denied'; readonly reason?: string }
@@ -663,7 +665,7 @@ export type ApprovalDecision =
 
 The UI identity of an approval request includes at least:
 
-```ts
+```ts design
 export interface ApprovalRequestView {
   readonly sessionId: SessionId
   readonly callId: ToolCallId
@@ -680,7 +682,7 @@ Accept only the first valid decision for a callId. Decisions arriving for cancel
 
 These commands map to existing DSH Host APIs; no new network endpoints are required:
 
-```ts
+```ts design
 export type HarnessCommand =
   | { readonly type: 'workspace.open'; readonly path: string }
   | { readonly type: 'session.create'; readonly workspaceId: WorkspaceId }
@@ -714,7 +716,7 @@ export type HarnessCommand =
 
 Command envelope:
 
-```ts
+```ts design
 export interface CommandEnvelope<C extends HarnessCommand = HarnessCommand> {
   readonly protocolVersion: 1
   readonly commandId: string
@@ -739,7 +741,7 @@ Idempotency rules:
 
 Host sends two event classes to UI:
 
-```ts
+```ts design
 export type HarnessEventEnvelope = DurableEnvelope | RuntimeEnvelope
 
 export interface DurableEnvelope {
@@ -780,7 +782,7 @@ Client rules:
 
 Reconnects and session switches use snapshot + cursor:
 
-```ts
+```ts design
 export interface SessionViewSnapshot {
   readonly sessionId: SessionId
   readonly generation: number
@@ -808,7 +810,7 @@ KernelDriver receives only the assembled `KernelContextSnapshot`. Direct `SKILL.
 
 GUI-managed MCP adds only a DSH Host configuration control plane, not a second MCP Client. Configuration resides in DSH settings namespace `local-harness.mcp`. For each enabled record, Host dynamically mounts one `@deepseek-ai/dsh-mcp-client` fiber in the deployment-global/root layer of DSH Tool Registry. All Agent scopes inherit it under DSH rules; do not duplicate connections or configuration per session. Instances of the same package in the fixed composition remain Loader-managed and read-only.
 
-```ts
+```ts design
 export type McpManagedServerId = string & { readonly __brand: 'McpManagedServerId' }
 
 export interface McpCredentialBinding {
@@ -892,7 +894,7 @@ stdio `command` is a nonempty executable/path; reject NUL, CR/LF, and command+ar
 
 Host adds the `mcpConfiguration` Typert namespace with these fixed business methods:
 
-```ts
+```ts design
 export interface McpMutationResult {
   readonly targetId: McpManagedServerId
   readonly snapshot: McpConfigurationSnapshot

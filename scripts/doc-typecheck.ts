@@ -13,6 +13,7 @@ import { builtDeclarationPath } from './doc-typecheck-paths.ts'
 import { markdownFences } from './markdown.ts'
 import { partitionPairedMarkdownDerivatives } from './paired-markdown-derivatives.ts'
 import { isArchivedAgentNotePath } from './repo-files.ts'
+import { validateDesignBlock } from './doc-design-blocks.ts'
 
 const root = resolve(import.meta.dirname, '..')
 
@@ -21,7 +22,7 @@ const root = resolve(import.meta.dirname, '..')
  * counted in the opt-out ratio; the catalog and type-equivalence variants are
  * excluded from that ratio because their owning gates verify them.
  */
-type BlockKind = 'check' | 'ignore' | 'type-equiv' | 'cordis-catalog' | 'persistence-catalog' | 'config-catalog'
+type BlockKind = 'check' | 'ignore' | 'design' | 'type-equiv' | 'cordis-catalog' | 'persistence-catalog' | 'config-catalog'
 
 /** One extracted code block. */
 interface Block {
@@ -36,6 +37,7 @@ interface Block {
 const KIND_BY_INFO: Record<string, BlockKind> = {
   'ts': 'check',
   'ts ignore-check': 'ignore',
+  'ts design': 'design',
   'ts type-equiv': 'type-equiv',
   'ts public-api': 'type-equiv',
   'ts cordis-catalog': 'cordis-catalog',
@@ -220,6 +222,17 @@ const { primary: all, derivatives } = partitionPairedMarkdownDerivatives(
 )
 const checked = all.filter(b => b.kind === 'check')
 const ignored = all.filter(b => b.kind === 'ignore')
+// These reviewed plans specify APIs that PR-B/PR-C have not implemented.
+// Current package documentation cannot use this syntax-only designation.
+const designs = all.filter(b => b.kind === 'design')
+for (const block of designs) {
+  const errors = validateDesignBlock(block.file, block.code)
+  if (errors.length > 0) {
+    console.error(`${block.file}:${block.line}: ${errors.join('\n')}`)
+    process.exitCode = 1
+  }
+}
+if (process.exitCode === 1) process.exit(1)
 // Only compile-eligible fences belong in the opt-out ratio; every other skipped
 // kind has an independent verifier named in the BlockKind rules above.
 const ratioDenominator = checked.length + ignored.length
@@ -243,8 +256,8 @@ if (compilationError !== undefined) {
 }
 
 const ratio = ignored.length / ratioDenominator
-const skipped = all.length - ratioDenominator
-console.log(`doc-typecheck: ${checked.length} block(s) compiled, ${ignored.length} ignored (${(ratio * 100).toFixed(0)}% opt-out), ${skipped} type-equiv/catalog (checked elsewhere), ${derivatives.length} paired derivative(s).`)
+const skipped = all.length - ratioDenominator - designs.length
+console.log(`doc-typecheck: ${checked.length} block(s) compiled, ${ignored.length} ignored (${(ratio * 100).toFixed(0)}% opt-out), ${designs.length} planned design block(s) syntax-checked (not API typechecked), ${skipped} type-equiv/catalog (checked elsewhere), ${derivatives.length} paired derivative(s).`)
 // Guard against the escape hatch becoming the norm.
 if (ratioDenominator >= 4 && ratio > 0.5) {
   console.error(`doc-typecheck: too many blocks opt out of checking (${ignored.length}/${ratioDenominator}). Make them compile or delete them.`)

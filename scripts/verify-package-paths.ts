@@ -5,8 +5,9 @@
  * packages, and unbuilt `lib/` output are outside the check.
  */
 
-import { existsSync, globSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { existsSync, globSync, readFileSync } from 'node:fs'
+import { relative, resolve } from 'node:path'
+import { plannedPackagePaths } from './planned-package-paths.ts'
 import {
   findReferenceViolations,
   isArchivedAgentNotePath,
@@ -78,13 +79,14 @@ function isDriftedPackageReference(ref: string): boolean {
 
 /** Find missing package references whose path names a live package; bare paths, typos, and illustrative skeletons do not count. */
 function findViolations(absPath: string): Violation[] {
+  const planned = plannedPackagePaths(relative(root, absPath), readFileSync(absPath, 'utf8'))
   return findReferenceViolations(
     root,
     absPath,
     PKG_REF,
     // Remove trailing separators or sentence punctuation matched greedily.
     ref => ref.replace(/[./]+$/, ''),
-    isDriftedPackageReference,
+    ref => !planned.has(ref) && isDriftedPackageReference(ref),
   )
 }
 

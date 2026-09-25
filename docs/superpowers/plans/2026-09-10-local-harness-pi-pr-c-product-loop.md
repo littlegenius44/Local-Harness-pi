@@ -1,25 +1,29 @@
 # PR-C V1 Product Loop Implementation Plan
 
+English | [中文](2026-09-10-local-harness-pi-pr-c-product-loop.zh.md)
+
+Fences marked `ts design` are planned implementation excerpts checked for syntax only, not available APIs. Their omitted host dependencies must be wired and pass source typechecking and contract tests in the owning implementation task.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在 Pi 内核桥稳定后，完成 OpenAI-compatible 本地/云端配置、图形化 MCP 管理、能力设置页、Composer “+”菜单、会话资料库、紧凑工具卡、Goal/Plan/Skill/PDF/网页能力验证、手动更新和 Windows 发布闭环。
+**Goal:** After stabilizing the Pi kernel bridge, complete local/cloud OpenAI-compatible configuration, graphical MCP management, capability settings, the Composer “+” menu, the session library, compact tool cards, Goal/Plan/Skill/PDF/web capability verification, manual updates, and the Windows release workflow.
 
-**Architecture:** 所有设置和能力状态继续来自 DSH Host service/settings/projection；前端只增加可替换的导航与展示。GUI-managed MCP records 进入 `local-harness.mcp` DSH settings namespace，再由 Host 动态挂载现有 DSH MCP Client；固定 composition MCP 只读。Composer 快捷入口执行现有 DSH command/source 或打开同一 settings section，不维护第二套 Goal/Plan/Skill/MCP 状态。
+**Architecture:** All settings and capability state remain in DSH Host services/settings/projections; the frontend adds replaceable navigation and presentation only. GUI-managed MCP records enter the `local-harness.mcp` DSH settings namespace, then Host dynamically mounts the existing DSH MCP Client; fixed-composition MCP remains read-only. Composer shortcuts execute existing DSH commands/sources or open the same settings section, without a second set of Goal/Plan/Skill/MCP state.
 
 **Tech Stack:** DSH Client slots/settings/remotes、React、TypeScript、Vitest browser tests、Electron updater、OpenAI Responses/Chat Completions mock server。
 
 ---
 
-## 上游复读清单
+## Upstream rereading checklist
 
-开工前完整阅读：
+Read completely before starting:
 
-- DSH Client：`ui-conversation` 的 `InputBar.tsx`、`apply.ts`、`contract/slots.ts`；`ui-input-trigger`；`ui-commands`；`ui-goal`；`ui-plan`；`ui-skill`；`ui-settings*`；`ui-tool`；`ui-attachment`；`ui-sidebar-documentpreview`；相关 unit/E2E tests。
-- DSH Host：`docs/cookbook/adding-a-package.md`；`llm-pi-ai/src/config.ts`、`adapter.ts`、`catalog.ts`、`discovery.ts`、`provider.ts`、`stream.ts`；`web/web-fetch-http/src/network.ts` 及网络测试；`settings/settings` 与 `api/settings-controller`；`credentials/credentials` 与 `api/settings-controller/src/credentials.ts`；`host/plugin-inventory`；`mcp/mcp-client/src/index.ts`、`transport.ts`、`connection.ts` 及全部 tests；`api/remotes` 的 forwarded-event allowlist 和 Typert selection；`api/session-controller`；`apps/desktop/src/update-coordinator.ts`、`main.ts`、`ipc.ts`。
-- Codex：设置导航、Composer “+”菜单和紧凑工具展示；只采用交互原则，不复制源码。
-- Pi：核对 0.85.1 OpenAI Responses/Completions model metadata，不在本 PR 改内核协议。
+- DSH Client: `ui-conversation`'s `InputBar.tsx`, `apply.ts`, `contract/slots.ts`; `ui-input-trigger`; `ui-commands`; `ui-goal`; `ui-plan`; `ui-skill`; `ui-settings*`; `ui-tool`; `ui-attachment`; `ui-sidebar-documentpreview`; related unit/E2E tests.
+- DSH Host: `docs/cookbook/adding-a-package.md`; `llm-pi-ai/src/config.ts`, `adapter.ts`, `catalog.ts`, `discovery.ts`, `provider.ts`, `stream.ts`; `web/web-fetch-http/src/network.ts` and network tests; `settings/settings` and `api/settings-controller`; `credentials/credentials` and `api/settings-controller/src/credentials.ts`; `host/plugin-inventory`; `mcp/mcp-client/src/index.ts`, `transport.ts`, `connection.ts`, and all tests; `api/remotes` forwarded-event allowlist and Typert selection; `api/session-controller`; `apps/desktop/src/update-coordinator.ts`, `main.ts`, `ipc.ts`.
+- Codex: settings navigation, Composer “+” menu, and compact tool presentation; adopt interaction principles only, never copy source.
+- Pi: check 0.85.1 OpenAI Responses/Completions model metadata; do not change the kernel protocol in this PR.
 
-## Task C1：限制并完善 V1 OpenAI-compatible route
+## Task C1: Constrain and complete the V1 OpenAI-compatible route
 
 **Files:**
 
@@ -55,53 +59,55 @@
 - Modify: `packages/bundle/base/cordis.patch.yml`
 - Modify: `packages/bundle/base/package.json`
 
-- [ ] 先写 route validation 失败测试：local HTTP/HTTPS 允许 `127.0.0.0/8`、`::1` 和 DNS 解析结果全为 loopback 的 `localhost`；拒绝远程 HTTP 和重定向到非 loopback；local/cloud 均拒绝 URL userinfo/query/fragment，cloud 只允许 HTTPS；V1 产品写入路径拒绝任何非空 `headers` 和非 SSE transport，标准 OpenAI Authorization 只由 Host 从 `apiKeyEnv` credential reference 构造。固定上游 catalog 的内部公开 header 不进入 UI snapshot。
+- [ ] First write failing route-validation tests: local HTTP/HTTPS allows `127.0.0.0/8`, `::1`, and `localhost` only when every DNS result is loopback; reject remote HTTP and redirects outside loopback; both local/cloud reject URL userinfo/query/fragment, and cloud permits HTTPS only; V1 product writes reject any nonempty `headers` and non-SSE transport, and Host alone constructs standard OpenAI Authorization from the `apiKeyEnv` credential reference. Internal public headers from the pinned upstream catalog never enter UI snapshots.
 
-- [ ] 先写 wire API 测试：新建/修改 route 必须显式为 `openai-responses` 或 `openai-completions`；其他 Pi protocols 全部被 V1 写入路径拒绝；不得按 URL 猜 protocol。
+- [ ] First write wire API tests: creating/modifying a route requires explicit `openai-responses` or `openai-completions`; V1 writes reject all other Pi protocols; never infer protocol from URL.
 
-- [ ] 运行失败测试。
+- [ ] Run the failing tests.
 
   Run: `pnpm vitest run packages/llm/llm-pi-ai/tests/config.spec.ts packages/llm/llm-pi-ai/tests/egress.spec.ts packages/client/ui-settings-models/tests/provider-form.client.spec.tsx`
 
-- [ ] 在 `PiAiProviderProfile` 增加产品字段：
+- [ ] Add product fields to `PiAiProviderProfile`:
 
-  ```ts
-  location?: 'local' | 'cloud'
+  ```ts design
+  interface ProviderProfileExcerpt {
+    location?: 'local' | 'cloud'
+  }
   ```
 
-  对所有由 Models UI 创建或改变且声明 `baseURL` 的 route，`location` 和 `api` 必填。固定上游 catalog 的未修改只读条目可以继续缺省，以兼容读取，但 V1 UI 不提供非 OpenAI protocol 的创建入口。
+  Every route created or changed through Models UI that declares `baseURL` requires `location` and `api`. Unmodified read-only entries from the pinned upstream catalog may retain defaults for read compatibility, but V1 UI offers no way to create non-OpenAI protocols.
 
-- [ ] 增加纯验证函数：
+- [ ] Add a pure validation function:
 
-  ```ts
+  ```ts design
   export function assertV1OpenAiRoute(provider: string, profile: PiAiProviderProfile): void
   ```
 
-  它在 `assertServiceable` 和 discovery 前运行；credential 仍只接受 `apiKeyEnv` credential reference，且对 UI 创建/修改的 route 拒绝任意 header。不得为了复用 DSH 的通用 `headers` 字段而把 secret 写进 settings。
+  Run it before `assertServiceable` and discovery; credentials still accept only `apiKeyEnv` credential references, and UI-created/modified routes reject arbitrary headers. Never write secrets into settings to reuse DSH's general `headers` field.
 
-- [ ] 先按接口契约 11.1 创建 `@local-harness/guarded-fetch@0.1.5-alpha.2`。实现从固定 DSH `web-fetch-http/src/network.ts` 提取“DNS 一次解析 -> 完整结果校验 -> request-scoped Undici Agent pinned lookup -> body/dispatcher 清理”模式，改成 `loopback | https` 两种显式 destination；不得直接 import `@deepseek-ai/dsh-web-fetch-http/src/*`。测试必须覆盖 IPv4/IPv6/localhost、混合 loopback+非 loopback DNS、DNS rebinding pin、同源 307/308、带 credential 跨源 307/308、301/302/303、第 6 跳、不可 replay body、abort、正常读完/取消/异常清理，以及不读取系统 proxy 环境。
+- [ ] First create `@local-harness/guarded-fetch@0.1.5-alpha.2` following interface contract 11.1. Extract the “resolve DNS once -> validate every result -> request-scoped Undici Agent pinned lookup -> body/dispatcher cleanup” pattern from pinned DSH `web-fetch-http/src/network.ts`, adapting it to two explicit destinations, `loopback | https`; never directly import `@deepseek-ai/dsh-web-fetch-http/src/*`. Tests must cover IPv4/IPv6/localhost, mixed loopback/non-loopback DNS, DNS rebinding pinning, same-origin 307/308, credential-bearing cross-origin 307/308, 301/302/303, the sixth redirect, non-replayable bodies, abort, cleanup after normal completion/cancellation/error, and no reading of system proxy environment variables.
 
-  包 manifest 为 private ESM，`version` 为 `0.1.5-alpha.2`，direct dependencies 精确使用当前 lock 已有的 `undici: 8.10.0` 与 `ipaddr.js: 2.5.0`；README 按 DSH util package 模板说明 Host-only、零直接模型上下文和限制。`tsconfig.base.json` 增加 `@local-harness/guarded-fetch` 精确 source alias，`tsconfig.host.json` 增加 project reference。运行 `pnpm run doc-sync` 生成配对 README 后，若生成 `README.zh.md`，必须与本任务一起提交。
+  The package manifest is private ESM, `version` is `0.1.5-alpha.2`, and direct dependencies use the exact versions already in the lockfile: `undici: 8.10.0` and `ipaddr.js: 2.5.0`; follow the DSH util package README template to describe Host-only use, zero direct model context, and limitations. Add an exact `@local-harness/guarded-fetch` source alias in `tsconfig.base.json` and a project reference in `tsconfig.host.json`. Run `pnpm run doc-sync` to generate paired READMEs; if `README.zh.md` is generated, commit it with this task.
 
-- [ ] `PiAiAdapterOptions` 增加按冻结 profile 创建 `GuardedFetchHandle` 的 factory；`streamWithSnapshot()` 把 `handle.fetch` 传入 `streamSimple()`，并在 stream 完成、取消或抛错后 await dispose。discovery 也从同一 factory 取得 fetch。local profile 用 `destination='loopback'`；cloud profile 用 `destination='https'`；`credentialBound` 等于 profile 是否声明 `apiKeyEnv`。`llm-pi-ai/package.json` 增加 `@local-harness/guarded-fetch: workspace:*`。测试在 mock Pi API 内捕获 `SimpleStreamOptions.fetch`，证明模型流和 discovery 都没有落到 `globalThis.fetch`，且 credential 只在 handle 已锁定的 origin 上发送。
+- [ ] Add a factory to `PiAiAdapterOptions` that creates a `GuardedFetchHandle` from the frozen profile; `streamWithSnapshot()` passes `handle.fetch` to `streamSimple()` and awaits disposal after completion, cancellation, or error. Discovery gets fetch from the same factory. Local profiles use `destination='loopback'`; cloud profiles use `destination='https'`; `credentialBound` reflects whether the profile declares `apiKeyEnv`. Add `@local-harness/guarded-fetch: workspace:*` to `llm-pi-ai/package.json`. Tests capture `SimpleStreamOptions.fetch` inside the mock Pi API to prove neither model streaming nor discovery falls back to `globalThis.fetch`, and credentials are sent only to the origin locked by the handle.
 
-- [ ] `provider.ts` 对含 `location` 的 profile 强制选择 Harness-owned `harnessApiKeyAuth`，即使 provider key 与 Pi installed catalog（例如 `openai`/`openai-codex`）同名也不继承其 OAuth、credential store 或 ambient environment discovery。local 无 `apiKeyEnv` 时传空 auth，cloud 缺 `apiKeyEnv` 在保存前拒绝。测试设置带 marker 的 `OPENAI_API_KEY`/Pi OAuth store，再发 keyless local request，断言 marker 未进入 header、错误、日志或 Session；另证明显式 DSH credential 只在当前 step 解析一次。
+- [ ] For profiles containing `location`, `provider.ts` forces Harness-owned `harnessApiKeyAuth`; even provider keys matching the Pi installed catalog (such as `openai`/`openai-codex`) must not inherit its OAuth, credential store, or ambient environment discovery. Pass empty auth for local profiles without `apiKeyEnv`; reject cloud profiles missing `apiKeyEnv` before saving. Tests set marker values in `OPENAI_API_KEY`/the Pi OAuth store, issue a keyless local request, and assert the marker never enters headers, errors, logs, or Session; separately prove explicit DSH credentials resolve exactly once in the current step.
 
-- [ ] ProviderEditor 增加“本地/云端”和“Responses/Chat Completions”显式选择；保存对象继续走 `SettingsScopeBinder` 与 existing credential operation。API key 输入不得进入 component snapshot、settings mutation 或 console。
+- [ ] Add explicit “Local/Cloud” and “Responses/Chat Completions” choices to ProviderEditor; saving continues through `SettingsScopeBinder` and the existing credential operation. API key input must never enter component snapshots, settings mutations, or console output.
 
-- [ ] 锁定首次启动状态机，不允许实现者自行决定跳过条件：
+- [ ] Lock the first-launch state machine; implementers must not invent skip conditions:
 
-  1. 无 serviceable provider：Welcome/Onboarding 自动打开，Composer Send disabled，提交事件不进入 Host。
-  2. loopback route：`apiKeyEnv` 可以为空；保存成功且 model id/serviceability 通过后关闭 onboarding，并原子更新 default selection。
-  3. cloud route：`apiKeyEnv` 和 `credentials.describe(ref).configured=true` 都满足才 ready；关闭弹窗不改变 disabled 状态。
-  4. discovery 失败：保留当前 draft、已有手工 models 和 credential 状态；错误码与“手工填写 model id”操作同时显示。
-  5. 默认模型切换写 DSH `agent-default-model` settings；会话内模型切换走现有 session selection，并只影响下一个 step。
+  1. No serviceable provider: Welcome/Onboarding opens automatically, Composer Send is disabled, and submit events never reach Host.
+  2. Loopback route: `apiKeyEnv` may be empty; after saving succeeds and model id/serviceability pass, close onboarding and atomically update the default selection.
+  3. Cloud route: ready requires both `apiKeyEnv` and `credentials.describe(ref).configured=true`; dismissing the dialog leaves Send disabled.
+  4. Discovery failure: preserve the current draft, existing manual models, and credential state; show the error code together with the “Enter model id manually” action.
+  5. Default model changes write DSH `agent-default-model` settings; in-session changes use existing session selection and affect only the next step.
 
-  `onboarding-openai-compatible.e2e.ts` 使用两个 keyless fixture：无 key loopback `/v1/models` 和要求 Authorization 的 HTTPS-shaped mock adapter。不得读取真实用户 credential。
+  `onboarding-openai-compatible.e2e.ts` uses two keyless fixtures: loopback `/v1/models` without a key, and an HTTPS-shaped mock adapter requiring Authorization. Never read real user credentials.
 
-- [ ] 默认 composition 不再激活 `@deepseek-ai/dsh-llm-deepseek`。由于 DSH `agent-default-model` schema 要求非空 provider/model，组合层仅使用不可调用的引导 selection `local-openai/unconfigured`；不得把某个 Qwen 或云模型 id 硬编码成产品默认值，也不得预置未知端口或凭据。Models onboarding 创建用户选择的 route、显式选择协议和 baseURL，并在 route 验证成功后把真实 provider/model 原子写入 default selection。selection 仍为 `local-openai/unconfigured` 或找不到对应 route/model 时，Send 必须保持禁用且不发请求。用户可采用 `/v1/models` 发现值或手工填写 model id；本地与云端 route 都走同一流程。保留 DSH DeepSeek 源码包用于上游兼容，但不在 V1 默认 profile 激活。
+- [ ] Default composition no longer activates `@deepseek-ai/dsh-llm-deepseek`. Because DSH `agent-default-model` schema requires nonempty provider/model, composition uses only the non-callable bootstrap selection `local-openai/unconfigured`; never hardcode a Qwen or cloud model id as the product default or preset an unknown port or credentials. Models onboarding creates the user's chosen route with explicit protocol and baseURL, then atomically writes the real provider/model to default selection after route validation succeeds. While selection remains `local-openai/unconfigured` or the corresponding route/model is missing, Send must stay disabled and issue no requests. Users may discover values through `/v1/models` or enter model ids manually; local and cloud routes share this flow. Retain the DSH DeepSeek source package for upstream compatibility, but do not activate it in the V1 default profile.
 
-- [ ] 运行聚焦测试和 mock model matrix。
+- [ ] Run focused tests and the mock model matrix.
 
   Run:
 
@@ -112,7 +118,7 @@
   pnpm run check:local-harness
   ```
 
-- [ ] 提交。
+- [ ] Commit.
 
   Run:
 
@@ -121,7 +127,7 @@
   git commit -m "feat: constrain V1 to explicit OpenAI-compatible routes"
   ```
 
-## Task C2：增加安全的能力清单 Remote
+## Task C2: Add a safe capability-inventory Remote
 
 **Files:**
 
@@ -133,9 +139,9 @@
 - Modify: `packages/host/plugin-inventory/src/index.ts`
 - Modify: `packages/host/plugin-inventory/tests/inventory.spec.ts`
 
-- [ ] 先写 Host 测试，期望 response 只有安全元数据：
+- [ ] First write Host tests expecting only safe metadata in the response:
 
-  ```ts
+  ```ts design
   export interface CapabilitySnapshot {
     readonly sessionId?: SessionId
     readonly product: {
@@ -163,17 +169,17 @@
   }
   ```
 
-- [ ] `product` 只能从 Host-only `@local-harness/product-identity` 生成；`session-controller/package.json` 增加 workspace dependency。测试把 Remote 字段逐项与该包 export 对比，并证明 notice 在离线状态完整可读。response 不得包含本地 notice 路径、MCP command args、env、HTTP headers、credential reference value、tool schema arguments 或工作区文件路径。
+- [ ] Generate `product` only from Host-only `@local-harness/product-identity`; add the workspace dependency to `session-controller/package.json`. Tests compare Remote fields individually against that package's exports and prove the full notice is readable offline. The response must not contain local notice paths, MCP command args, env, HTTP headers, credential reference values, tool schema arguments, or workspace file paths.
 
-- [ ] 运行失败测试。
+- [ ] Run the failing tests.
 
   Run: `pnpm vitest run packages/api/session-controller/tests/capabilities.host.spec.ts packages/host/plugin-inventory/tests/inventory.spec.ts`
 
-- [ ] `PluginInventoryEntry` 只增加经过 allowlist 的可选元数据。仅当 moduleName 为 `@deepseek-ai/dsh-mcp-client` 时，从 loader config 读取并验证 `serverName`、`transport`；其他 config 字段一律不投影。
+- [ ] Add only allowlisted optional metadata to `PluginInventoryEntry`. Read and validate `serverName` and `transport` from loader config only when moduleName is `@deepseek-ai/dsh-mcp-client`; project no other config fields.
 
-- [ ] `capabilities/list` 接收可选 sessionId。存在 live agent 时从该 Agent scope 的 `tools.schemas(agent)` 读取可见工具，按 `mcp__<serverName>__` 计数；不存在 session 时工具数组为空但仍返回配置/失败中的 MCP entry。Skills 继续使用现有 `skills/list` Remote，不复制其目录或缓存。
+- [ ] `capabilities/list` accepts optional sessionId. With a live agent, read visible tools from that Agent scope's `tools.schemas(agent)` and count by `mcp__<serverName>__`; without a session, return an empty tools array while still returning configured/failed MCP entries. Skills continue using the existing `skills/list` Remote; never duplicate its directory or cache.
 
-- [ ] 运行 Typert generator 和测试。
+- [ ] Run the Typert generator and tests.
 
   Run:
 
@@ -183,9 +189,9 @@
   pnpm vitest run packages/api/session-controller/tests/capabilities.host.spec.ts packages/host/plugin-inventory/tests/inventory.spec.ts
   ```
 
-  `build:lib:host` 生成 Typert Remote artifacts；不得手改生成目录后跳过 `typecheck:contracts-ready`。
+  `build:lib:host` generates Typert Remote artifacts; never hand-edit generated directories and skip `typecheck:contracts-ready`.
 
-- [ ] 提交。
+- [ ] Commit.
 
   Run:
 
@@ -194,7 +200,7 @@
   git commit -m "feat: expose a redacted capability inventory"
   ```
 
-## Task C3：实现 Host-owned MCP 配置与单 server reconcile
+## Task C3: Implement Host-owned MCP configuration and per-server reconciliation
 
 **Files:**
 
@@ -230,11 +236,11 @@
 - Modify: `tsconfig.base.json`
 - Modify: `tsconfig.host.json`
 
-- [ ] 创建包前先写 config 测试，逐项覆盖 `docs/architecture/interface-contracts.md` 第 20.1 节的输入上界。测试表必须包含：65 个 server、129 个 args、65 个 binding、非法/重复 `serverName`、非法 credential ref、CR/LF prefix、`DSH_` env、shell command 字符串、相对 cwd、HTTP userinfo/query/fragment、远程 HTTP、localhost/loopback IP HTTP、HTTPS、禁止 header 和合法 Authorization credential binding。
+- [ ] Before creating packages, write config tests covering every input bound in section 20.1 of `docs/architecture/interface-contracts.md`. The table must include 65 servers, 129 args, 65 bindings, invalid/duplicate `serverName`, invalid credential refs, CR/LF prefixes, `DSH_` env, shell command strings, relative cwd, HTTP userinfo/query/fragment, remote HTTP, localhost/loopback IP HTTP, HTTPS, forbidden headers, and valid Authorization credential bindings.
 
-- [ ] 不自建 MCP transport/client。MCP config 根据初始 URL 选择共享 `@local-harness/guarded-fetch` policy：loopback HTTP/HTTPS 为 `destination='loopback'`，其他地址只能 HTTPS 且为 `destination='https'`；存在任意 credential-bound header 时 `credentialBound=true`。`mcp-client/package.json` 增加 `@local-harness/guarded-fetch: workspace:*`；`transport.ts` 把 handle.fetch 传给 SDK `StreamableHTTPClientTransport`，fiber dispose 时 await handle.dispose。GUI config validator 复用 guarded-fetch 导出的纯 URL/DNS policy，不另写 `http-url-policy.ts`。MCP 测试复跑共享 policy 的集成子集：loopback/HTTPS、userinfo、同源 307、带 credential 跨源 307、302、第 6 跳、abort 和 response body 关闭；既有 proxy 测试调整为断言模型/MCP 不读取系统 proxy，而 DSH `web_fetch` 自身原 proxy 行为保持不变。
+- [ ] Never build a separate MCP transport/client. MCP config chooses shared `@local-harness/guarded-fetch` policy from the initial URL: loopback HTTP/HTTPS uses `destination='loopback'`; other addresses require HTTPS and `destination='https'`; any credential-bound header sets `credentialBound=true`. Add `@local-harness/guarded-fetch: workspace:*` to `mcp-client/package.json`; `transport.ts` passes handle.fetch to SDK `StreamableHTTPClientTransport` and awaits handle.dispose on fiber disposal. The GUI config validator reuses guarded-fetch's exported pure URL/DNS policy instead of writing `http-url-policy.ts`. MCP tests rerun the integration subset of shared policy: loopback/HTTPS, userinfo, same-origin 307, credential-bearing cross-origin 307, 302, the sixth redirect, abort, and response-body closure; adjust existing proxy tests to assert models/MCP do not read system proxies while preserving DSH `web_fetch`'s own proxy behavior.
 
-- [ ] 包 manifest 固定为私有 ESM：
+- [ ] Fix the package manifest as private ESM:
 
   ```json
   {
@@ -245,22 +251,22 @@
   }
   ```
 
-  `@local-harness/mcp-configuration` 只依赖实际 import 的 DSH settings、credentials、tools、MCP Client、schema 和 `@local-harness/guarded-fetch`；API 包固定为 `@local-harness/api-mcp-configuration-controller@0.1.5-alpha.2`，只依赖 MCP configuration、Typert/Remote 与所需 DSH API 包。两者都不得依赖 Pi package 或 Client UI。为两个新 Host 包各写 DSH 模板要求的 README/README.i18n，运行 `pnpm run doc-sync`；`tsconfig.base.json` 分别增加 `@local-harness/mcp-configuration` 和 `@local-harness/api-mcp-configuration-controller` 的精确 source alias，`tsconfig.host.json` 分别增加 `packages/mcp/mcp-configuration` 和 `packages/api/mcp-configuration-controller` project reference，禁止加入 Client aggregate。
+  `@local-harness/mcp-configuration` depends only on actually imported DSH settings, credentials, tools, MCP Client, schema, and `@local-harness/guarded-fetch`; the API package is fixed as `@local-harness/api-mcp-configuration-controller@0.1.5-alpha.2` and depends only on MCP configuration, Typert/Remote, and required DSH API packages. Neither may depend on Pi packages or Client UI. Write the DSH-template README/README.i18n for each new Host package and run `pnpm run doc-sync`; add exact source aliases for `@local-harness/mcp-configuration` and `@local-harness/api-mcp-configuration-controller` in `tsconfig.base.json`, and project references for `packages/mcp/mcp-configuration` and `packages/api/mcp-configuration-controller` in `tsconfig.host.json`; never add them to the Client aggregate.
 
-- [ ] 在 `config.ts` 注册且只注册 `SETTINGS_NAMESPACE = 'local-harness.mcp'`。user section 的唯一字段是 `servers: McpManagedServerRecord[]`；base 为 `{ servers: [] }`。Host 生成 id 后对完整 servers array 使用 DSH settings CAS，不另写 JSON/YAML 文件，不把 runtime phase 写回 settings。
+- [ ] Register only `SETTINGS_NAMESPACE = 'local-harness.mcp'` in `config.ts`. The user section has only `servers: McpManagedServerRecord[]`; base is `{ servers: [] }`. After generating the id, Host uses DSH settings CAS for the entire servers array; write no separate JSON/YAML files and never persist runtime phase into settings.
 
-- [ ] 先写 reconciler 失败测试，使用真实 DSH Tool Registry 和 mock MCP transport，固定断言：
+- [ ] First write failing reconciler tests using the real DSH Tool Registry and mock MCP transport, with fixed assertions:
 
-  - create 保持 disabled，没有 transport；enable 缺 credential 返回 `MCP_CREDENTIAL_MISSING`。
-  - enable 后只解析 binding 引用并把 resolved 值传给 DSH MCP Client config；snapshot、logger 和 error 没有该值。
-  - update A 只 dispose/remount A，B 的 fiber identity、tool generation 和 active call 不变。
-  - 一个 server initial sync 失败时记录 `MCP_APPLY_FAILED`，其他 server 和 builtin tool 仍存在。
-  - credential A 更新只重启引用 A 的 server；两个快速 revision 串行，旧 completion 不覆盖新 phase。
-  - disable/remove 等待 DSH MCP Client disposal；remove 不调用 `credentials.unset`。
+  - Create remains disabled with no transport; enabling without credentials returns `MCP_CREDENTIAL_MISSING`.
+  - Enable resolves only binding references and passes resolved values to DSH MCP Client config; snapshots, logger output, and errors contain no such values.
+  - Updating A disposes/remounts only A; B's fiber identity, tool generation, and active call remain unchanged.
+  - Initial sync failure of one server records `MCP_APPLY_FAILED`; other servers and builtin tools remain present.
+  - Updating credential A restarts only servers referencing A; two rapid revisions serialize, and an old completion cannot overwrite the new phase.
+  - Disable/remove awaits DSH MCP Client disposal; remove never calls `credentials.unset`.
 
-- [ ] `McpConfigurationReconciler` 在 Host root tool scope 挂载 GUI-managed DSH MCP Client，使 Agent child scopes 通过现有 DSH scoped registry 看见 managed tools。内部状态固定为：
+- [ ] `McpConfigurationReconciler` mounts GUI-managed DSH MCP Clients in the Host root tool scope so Agent child scopes see managed tools through the existing DSH scoped registry. Fix internal state as:
 
-  ```ts
+  ```ts design
   interface AppliedServer {
     readonly id: McpManagedServerId
     readonly configRevision: number
@@ -272,13 +278,13 @@
   const queues = new Map<McpManagedServerId, Promise<void>>()
   ```
 
-  每个 id 的操作链接到自己的 queue；不同 id 可以并行。挂载必须调用现有 `@deepseek-ai/dsh-mcp-client` plugin，不复制 transport、reconnect、tool registration 或 tool execution。增加 real-scope 测试，证明 root managed tool 对两个 Agent scope 可见且 dispose 后同时消失；这是 DSH Tool Registry 的 deployment-global layer 契约，不创建 Agent Preset overlay，也不按 session 建连接或配置副本。
+  Operations for each id chain onto its own queue; different ids may run concurrently. Mount the existing `@deepseek-ai/dsh-mcp-client` plugin; never duplicate transport, reconnect, tool registration, or tool execution. Add real-scope tests proving a root managed tool is visible to two Agent scopes and disappears from both on disposal; this is the DSH Tool Registry deployment-global layer contract, not an Agent Preset overlay, and creates no per-session connection/config copies.
 
-- [ ] API controller 先写失败测试，再逐字实现接口契约第 20.2 节的 `list/create/update/setEnabled/remove/reconnect`。业务拒绝抛 DSH `RemoteError` 的精确 `mcp/*` wire code，Client 只在边界层映射为对应 `MCP_*` semantic code；CAS 在 validation 之后、credential resolve/fiber mutation 之前。`create` 丢弃 Client id 并强制 disabled；rename 未 acknowledge 时拒绝；composition/managed 名称冲突在 commit 前拒绝。
+- [ ] Write failing API controller tests first, then implement `list/create/update/setEnabled/remove/reconnect` exactly as interface contract 20.2 specifies. Business rejections throw DSH `RemoteError` with the exact `mcp/*` wire code; Client maps to the corresponding `MCP_*` semantic code only at the boundary. CAS occurs after validation but before credential resolution/fiber mutation. `create` discards Client id and forces disabled; reject unacknowledged renames and composition/managed name conflicts before commit.
 
-- [ ] mutation 返回时遵守“commit 与 apply 分离”：CAS 失败没有任何运行时变化；CAS 成功后即使连接失败也返回最新 snapshot 和 `application.phase='error'`，不得抛出使 UI 误认为配置未保存。`mcp-configuration/status` Cordis event 只发 `McpServerRuntimeView`，不发 config 或 credential；在 `@deepseek-ai/dsh-api-remotes` 的 forwarded-event allowlist 增加同名 `emit` 项，并用 `TypertRemoteEventSelection` 暴露给 Client。
+- [ ] Mutations separate commit from apply: failed CAS changes no runtime state; successful CAS returns the latest snapshot and `application.phase='error'` even if connection fails, never throws an error implying configuration was not saved. The `mcp-configuration/status` Cordis event emits only `McpServerRuntimeView`, never config or credentials; add the same-named `emit` entry to the `@deepseek-ai/dsh-api-remotes` forwarded-event allowlist and expose it to Client through `TypertRemoteEventSelection`.
 
-- [ ] 在 base composition 的 settings、credentials、tools 之后加载 configuration service 和 controller；不要加入默认 server。运行生成和测试：
+- [ ] Load configuration service and controller after settings, credentials, and tools in base composition; add no default server. Run generation and tests:
 
   ```powershell
   pnpm run build:lib:host
@@ -287,16 +293,16 @@
   pnpm run check:local-harness
   ```
 
-  Expected: 全部通过；`git grep -n "@earendil-works/pi" -- packages/mcp/mcp-configuration packages/api/mcp-configuration-controller` 无输出。
+  Expected: all pass; `git grep -n "@earendil-works/pi" -- packages/mcp/mcp-configuration packages/api/mcp-configuration-controller` produces no output.
 
-- [ ] 提交：
+- [ ] Commit:
 
   ```powershell
   git add packages/mcp/mcp-client packages/mcp/mcp-configuration packages/api/mcp-configuration-controller packages/api/remotes packages/bundle/base pnpm-lock.yaml tsconfig.base.json tsconfig.host.json
   git commit -m "feat: add host-owned MCP configuration management"
   ```
 
-## Task C4：补齐 Tools、Skills、MCP、Experimental、About 设置分区
+## Task C4: Complete Tools, Skills, MCP, Experimental, and About settings sections
 
 **Files:**
 
@@ -326,31 +332,31 @@
 - Modify: `tsconfig.base.json`
 - Modify: `tsconfig.client.json`
 
-- [ ] 先写 slot registration 测试，断言 section ids 和顺序固定：`models=10`（已有）、`tools=20`、`skills=30`、`mcp=40`、`experimental=90`、`about=100`。全部 copy 经 typed zh/en locale。
+- [ ] First write slot-registration tests asserting fixed section ids and order: `models=10` (existing), `tools=20`, `skills=30`, `mcp=40`, `experimental=90`, `about=100`. All copy uses typed zh/en locales.
 
-- [ ] 新包 manifest 固定使用 `"name": "@local-harness/ui-settings-capabilities"`、`"version": "0.1.5-alpha.2"`、`"private": true`、ESM 和 DSH Client package 的标准 `main/types/exports`。依赖与 peer dependency 以 `ui-settings-plugins` 为模板，只加入实际 import 的 DSH Client/Remote workspace 包；禁止依赖 Host-only `@local-harness/product-identity`。`web-app` 通过 workspace dependency 和现有 Client plugin row 加载它。
+- [ ] Fix the new package manifest to `"name": "@local-harness/ui-settings-capabilities"`, `"version": "0.1.5-alpha.2"`, `"private": true`, ESM, and standard DSH Client package `main/types/exports`. Use `ui-settings-plugins` as the dependency/peer-dependency template, adding only actually imported DSH Client/Remote workspace packages; never depend on Host-only `@local-harness/product-identity`. `web-app` loads it through a workspace dependency and existing Client plugin row.
 
-  按 `packages/client/AGENTS.md` 和 DSH client package 模板加入 `dsh.client` manifest、`./client` export、client tsdown preset、README/README.i18n；`tsconfig.base.json` 增加 `@local-harness/ui-settings-capabilities` 与 `/client` 精确 aliases，`tsconfig.client.json` 增加唯一 project reference，禁止加入 Host aggregate。运行 `pnpm install` 与 `pnpm run doc-sync`，生成的 README.zh.md 一并提交。
+  Following `packages/client/AGENTS.md` and the DSH client package template, add the `dsh.client` manifest, `./client` export, client tsdown preset, and README/README.i18n; add exact `@local-harness/ui-settings-capabilities` and `/client` aliases in `tsconfig.base.json`, and a single project reference in `tsconfig.client.json`, never the Host aggregate. Run `pnpm install` and `pnpm run doc-sync`, committing generated README.zh.md too.
 
-- [ ] 先写 store 测试：同一连接 generation 内 capability、plugin inventory 和 skills 请求 single-flight；Host invalidation/connection reset 刷新；无当前 session 时 Skills/MCP 显示配置状态而不伪造 live tool count。
+- [ ] First write store tests: capability, plugin inventory, and skills requests are single-flight within one connection generation; Host invalidation/connection reset refreshes them; without a current session, Skills/MCP show configuration state without inventing live tool counts.
 
-- [ ] ToolsSection 复用现有 DSH settings scopes 和 `ui-settings-plugins` 的 Bash/Web Search/Agent Loop controllers；抽取并 export 共享 controller，而不是复制一份设置。增加 permission preset、workspace、network 和 MCP 有效权限摘要；完整编辑仍落同一个 Host settings document。V1 将 DSH 已安装执行插件视为受信任源码，基础拒绝继续由 DSH workspace/network/approval/`tools/pre-execute` 策略执行；不新增未执行的便携 manifest 权限字段。
+- [ ] ToolsSection reuses existing DSH settings scopes and the Bash/Web Search/Agent Loop controllers from `ui-settings-plugins`; extract and export shared controllers instead of copying settings. Add summaries of permission preset, workspace, network, and effective MCP permissions; full editing still targets the same Host settings document. V1 treats installed DSH execution plugins as trusted source; basic denials remain enforced by DSH workspace/network/approval/`tools/pre-execute` policies; add no unenforced portable manifest permission fields.
 
-- [ ] SkillsSection 在当前 session 存在时调用既有 `skills/list`，显示来源、model/user invocable、冲突或加载错误；无 session 时给出“打开工作区会话后检查”的状态。不得扫描浏览器文件系统或缓存 `SKILL.md` 正文。
+- [ ] With a current session, SkillsSection calls existing `skills/list` to display source, model/user invocability, conflicts, or load errors; without a session, show “Open a workspace session to inspect”. Never scan the browser filesystem or cache `SKILL.md` bodies.
 
-- [ ] McpSection 合并 `mcpConfiguration.list()`、`pluginInventory.list()` 和 `capabilities/list(sessionId)`：composition 行带“由配置提供，只读”标记；managed 行提供 Edit、Enable/Disable、Reconnect、Remove。单个失败不隐藏其他 server。Client store 只保存未提交 draft 与当前 Remote snapshot；connection generation 变化后重读，不写 localStorage/IndexedDB。
+- [ ] McpSection combines `mcpConfiguration.list()`, `pluginInventory.list()`, and `capabilities/list(sessionId)`: composition rows show “Provided by configuration, read-only”; managed rows offer Edit, Enable/Disable, Reconnect, Remove. One failure must not hide other servers. Client store holds only uncommitted drafts and the current Remote snapshot; reread after connection-generation changes, with no localStorage/IndexedDB writes.
 
-  首次启用 stdio 行时，UI 必须显示 executable、分项 args、cwd 和 env reference 名（不显示值）的本地进程风险确认；HTTP 行显示 origin 和 header 名。用户取消时不发出 `setEnabled`；Host 对实际 enable mutation 写入脱敏诊断审计（server id/name、transport 和时间，不含 args、URL path/query、ref/value），不写入 Session。
+  On first enabling a stdio row, UI must show a local-process risk confirmation with executable, individual args, cwd, and env reference names (never values); HTTP rows show origin and header names. Cancellation issues no `setEnabled`; Host records a redacted diagnostic audit for actual enable mutations (server id/name, transport, and time, excluding args, URL path/query, ref/value), never in Session.
 
-- [ ] McpServerDialog 固定使用结构化字段而非 command line textarea。新建默认 disabled；transport 切换清除另一 arm 的字段；args 每行一个数组项。credential editor 每行编辑 env/header 名、credential reference 和公开 prefix，secret value 只通过既有 `credentials.set(ref, value)` 单向提交，页面只显示 configured/source/writable。
+- [ ] McpServerDialog uses structured fields, never a command-line textarea. New entries default disabled; switching transport clears fields of the other arm; each args line is one array item. Each credential editor row edits env/header name, credential reference, and public prefix; secret values go only through the existing one-way `credentials.set(ref, value)` operation, while the page shows only configured/source/writable.
 
-- [ ] 保存和错误交互必须逐项测试：CAS conflict 保留 draft 并显示 Reload/Compare，不自动重试；rename 显示工具名变化警告并在第二次确认时传 `acknowledgeToolRename=true`；apply error 显示“配置已保存，连接失败”及 Reconnect；remove 明确提示 credential 不会删除；缺 credential 时 Enable disabled 并聚焦对应 binding。
+- [ ] Test each save/error interaction: CAS conflicts preserve the draft and show Reload/Compare without automatic retry; rename warns about tool-name changes and passes `acknowledgeToolRename=true` on second confirmation; apply errors show “Configuration saved, connection failed” and Reconnect; remove states that credentials remain; missing credentials disable Enable and focus the corresponding binding.
 
-- [ ] ExperimentalSection V1 只显示明确关闭的未来能力说明，不提供 Qwen Code 内核、Office 编辑、完整浏览器自动化或自动安装开关。
+- [ ] V1 ExperimentalSection shows descriptions of explicitly disabled future capabilities only, with no switches for Qwen Code kernel, Office editing, full browser automation, or automatic installation.
 
-- [ ] AboutSection 只读取 `capabilities/list` 的 `product` Remote 投影，离线显示产品版本、固定 DSH/Pi/Codex reference 信息和 DSH/Pi MIT 正文；`notices.ts` 只负责把 `product.thirdPartyNotices` 分段用于 UI，不声明版本常量、不读取本地路径。Host 测试已经负责与 `apps/desktop/resources/THIRD_PARTY_NOTICES.txt` 的权威 export 对比，Client 测试只验证渲染。外链使用安全 external-open 组件；没有网络时许可正文仍可展开。
+- [ ] AboutSection reads only the `product` Remote projection from `capabilities/list`, showing product version, pinned DSH/Pi/Codex references, and full DSH/Pi MIT texts offline; `notices.ts` only sections `product.thirdPartyNotices` for UI, never declares version constants or reads local paths. Host tests already compare against authoritative exports from `apps/desktop/resources/THIRD_PARTY_NOTICES.txt`; Client tests verify rendering only. External links use the safe external-open component; license texts remain expandable offline.
 
-- [ ] 运行测试与 Web composition build。
+- [ ] Run tests and the Web composition build.
 
   Run:
 
@@ -360,7 +366,7 @@
   pnpm run typecheck
   ```
 
-- [ ] 提交。
+- [ ] Commit.
 
   Run:
 
@@ -369,28 +375,28 @@
   git commit -m "feat: add capability-focused settings sections"
   ```
 
-## Task C5：增加设置导航 service 和 Composer “+”能力菜单
+## Task C5: Add a settings navigation service and Composer “+” capability menu
 
 **Files:**
 
 - Create: `packages/client/ui-settings/src/client/navigation.ts`
 - Modify: `packages/client/ui-settings/src/client/index.ts`
 - Modify: `packages/client/ui-settings-general/src/client/SettingsRoot.tsx`
-- Test: `packages/client/ui-settings-general/tests/settings-navigation.client.spec.tsx`
+- Create: `packages/client/ui-settings-general/tests/settings-navigation.client.spec.tsx`
 - Create: `packages/client/ui-conversation/src/client/skeleton/ComposerAddMenu.tsx`
 - Create: `packages/client/ui-conversation/src/client/skeleton/ComposerAddMenu.module.css`
 - Modify: `packages/client/ui-conversation/src/client/contract/slots.ts`
 - Modify: `packages/client/ui-conversation/src/client/apply.ts`
 - Modify: `packages/client/ui-conversation/src/client/skeleton/InputBar.tsx`
 - Modify: `packages/client/ui-conversation/src/client/locales.ts`
-- Test: `packages/client/ui-conversation/tests/composer-add-menu.client.spec.tsx`
+- Create: `packages/client/ui-conversation/tests/composer-add-menu.client.spec.tsx`
 - E2E: `apps/web/tests/composer-add-menu.e2e.ts`
 
-- [ ] 先写 settings navigation 测试：`ctx.settingsNavigation.open('mcp')` 打开 Settings 并选中已注册 section；不存在 id 返回稳定错误且不打开空 panel；请求只存在内存，不写 localStorage。
+- [ ] First write settings-navigation tests: `ctx.settingsNavigation.open('mcp')` opens Settings and selects the registered section; a missing id returns a stable error without opening an empty panel; requests remain in memory, never localStorage.
 
-- [ ] 实现 root service：
+- [ ] Implement the root service:
 
-  ```ts
+  ```ts design
   export interface SettingsNavigationRequest {
     readonly revision: number
     readonly sectionId: string
@@ -402,33 +408,35 @@
   }
   ```
 
-  `SettingsRoot` 订阅 request，在 ledger 中验证 sectionId 后设置 panel open 和 active section；处理 revision 后不清除 durable state，因为这里没有 durable state。
+  `SettingsRoot` subscribes to requests, validates sectionId in the ledger, and sets panel open and active section; handling a revision clears no durable state because none exists here.
 
-- [ ] 把 Composer 注入从只支持 command 改为通用 source：
+- [ ] Generalize Composer injection from command-only to any source:
 
-  ```ts
-  toggleInputSource: ((source: 'command' | 'skill', selection: EditSelection) => void) | undefined
+  ```ts design
+  interface ComposerInjectionExcerpt {
+    toggleInputSource: ((source: 'command' | 'skill', selection: EditSelection) => void) | undefined
+  }
   ```
 
-  实现继续调用 existing `inputTriggers.toggleSource(source, ...)`；不得另写技能搜索。
+  The implementation continues calling existing `inputTriggers.toggleSource(source, ...)`; never write separate skill search.
 
-- [ ] 先写菜单测试，固定条目和行为：
+- [ ] First write menu tests with fixed items and behavior:
 
-  1. Attachment：触发现有 hidden file input。
-  2. Skill：打开 existing `skill` input source。
-  3. MCP：打开 settings `mcp`。
-  4. Tools & Permissions：打开 settings `tools`。
-  5. Goal：调用 existing command path `/goal`。
-  6. Plan：根据 DSH plan projection 调用 `/plan` 或 `/plan off`。
-  7. Commands：打开 existing `command` input source。
+  1. Attachment: trigger the existing hidden file input.
+  2. Skill: open the existing `skill` input source.
+  3. MCP: open settings `mcp`.
+  4. Tools & Permissions: open settings `tools`.
+  5. Goal: invoke the existing `/goal` command path.
+  6. Plan: invoke `/plan` or `/plan off` based on the DSH plan projection.
+  7. Commands: open the existing `command` input source.
 
-  菜单用 `role=menu`/`menuitem`，支持 Enter、方向键、Escape、outside click 和焦点归还。
+  Use `role=menu`/`menuitem`; support Enter, arrow keys, Escape, outside click, and focus restoration.
 
-- [ ] 用 `ComposerAddMenu` 替换 Plus 按钮直接打开 command list 的行为。附件必须进入 Plus 菜单；是否保留 paperclip 作为冗余快捷键由现有布局测试决定，但 Plus 路径必须完整可用。
+- [ ] Replace the Plus button's direct command-list opening with `ComposerAddMenu`. Attachments must be available through Plus; existing layout tests determine whether to retain the paperclip as a redundant shortcut, but the Plus path must work fully.
 
-- [ ] Goal/Plan label 和状态只读 DSH projection/command availability；Skills/MCP 只读现有 Remote/store；不得在 React state 或 localStorage 保存能力开关。
+- [ ] Goal/Plan labels and state read only DSH projections/command availability; Skills/MCP read only existing Remotes/stores; never save capability switches in React state or localStorage.
 
-- [ ] 运行测试。
+- [ ] Run tests.
 
   Run:
 
@@ -438,7 +446,7 @@
   pnpm exec vitest run --config vitest.web.config.ts apps/web/tests/composer-add-menu.e2e.ts
   ```
 
-- [ ] 提交。
+- [ ] Commit.
 
   Run:
 
@@ -447,7 +455,7 @@
   git commit -m "feat: add the unified Composer capability menu"
   ```
 
-## Task C6：收紧工具卡和 transient-to-durable 收敛
+## Task C6: Compact tool cards and converge transient to durable state
 
 **Files:**
 
@@ -459,15 +467,15 @@
 - E2E: `apps/web/tests/tool-card-compact.e2e.ts`
 - E2E: `apps/web/tests/session-stream-convergence.e2e.ts`
 
-- [ ] 先写工具卡测试：默认只显示状态、工具名、短目标、已记录 duration 和结果摘要；raw arguments/output/error/meta 只在展开后出现；错误和审批等待仍无需展开即可辨认。
+- [ ] First write tool-card tests: default display includes only status, tool name, short target, recorded duration, and result summary; raw arguments/output/error/meta appear only when expanded; errors and pending approval remain recognizable while collapsed.
 
-- [ ] duration 只由 durable call/result timestamp 或现有 projection 计算；历史事件没有时间时省略，不用 `Date.now()` 伪造 replay 值。
+- [ ] Calculate duration only from durable call/result timestamps or existing projections; omit it when historical events lack time, never fabricate replay values with `Date.now()`.
 
-- [ ] 先写会话收敛测试：同 messageId 的 transient revision 单调替换；对应 durable seq 到达后原位替换；切换 session 后旧 session delta 被丢弃；重连从 DSH snapshot 重建，不保留浏览器 durable chat 副本。
+- [ ] First write session-convergence tests: transient revisions for the same messageId replace monotonically; the corresponding durable seq replaces in place; discard old-session deltas after session switching; reconnect rebuilds from DSH snapshot without a browser-side durable chat copy.
 
-- [ ] 只在测试证明确有缺口时修改 assistant projection；若固定 DSH 已满足收敛，保留源码并只提交回归测试。不得更改 Session schema 来实现视觉折叠。
+- [ ] Change assistant projection only if tests prove a gap; if pinned DSH already converges correctly, retain its source and commit regression tests only. Never change Session schema for visual collapsing.
 
-- [ ] 运行测试和 E2E。
+- [ ] Run tests and E2E.
 
   Run:
 
@@ -477,7 +485,7 @@
   pnpm exec vitest run --config vitest.web.config.ts apps/web/tests/tool-card-compact.e2e.ts apps/web/tests/session-stream-convergence.e2e.ts
   ```
 
-- [ ] 提交。
+- [ ] Commit.
 
   Run:
 
@@ -486,7 +494,7 @@
   git commit -m "feat: compact tool cards and lock stream convergence"
   ```
 
-## Task C7：验证复用能力和完整产品工作流
+## Task C7: Verify reused capabilities and the complete product workflow
 
 **Files:**
 
@@ -509,27 +517,27 @@
 - Modify tests: `apps/web/tests/workspace-management.e2e.ts`
 - Modify: `packages/bundle/web-app/cordis.patch.yml`
 
-- [ ] Goal test断言 `/goal` 和 Plus 入口都产生同一 `goal/change` projection；恢复后 GoalBar 一致。
+- [ ] Goal tests assert `/goal` and the Plus entry produce the same `goal/change` projection; GoalBar remains consistent after recovery.
 
-- [ ] Plan test断言进入 `/plan` 后下一 step 的 DSH tool schema 已受限制，Plus 菜单显示退出状态，`/plan off` 后恢复；不读取 Pi state。
+- [ ] Plan tests assert that after `/plan`, the next step's DSH tool schema is restricted, Plus shows exit state, and `/plan off` restores it; never read Pi state.
 
-- [ ] Skill test断言现有 progressive disclosure：目录列表不把全部 SKILL.md 放进 prompt，选中后才读取正文；Pi 只收到 DSH assembled context。
+- [ ] Skill tests assert existing progressive disclosure: the directory listing does not put all SKILL.md files in the prompt; selection reads the body; Pi receives only DSH assembled context.
 
-- [ ] 在 `packages/bundle/web-app/cordis.patch.yml` 中将已有 `session-query-sqlite` 行精确改为 `path: !!js dshHomePath('session-search.db')` 和 `openAt: first-search`。不修改 base bundle 的 `openAt: never`，以免把桌面产品选择扩散到 CLI/其他 profile；测试 scaffold 可继续显式覆盖为 `:memory:`。
+- [ ] In `packages/bundle/web-app/cordis.patch.yml`, change the existing `session-query-sqlite` row exactly to `path: !!js dshHomePath('session-search.db')` and `openAt: first-search`. Preserve base bundle `openAt: never` so the desktop product choice does not spread to CLI/other profiles; test scaffolds may continue overriding it explicitly to `:memory:`.
 
-- [ ] MCP test 启动 DSH 自带 fixture server，经 DSH MCP Client 注册 `mcp__*` tool，经 Pi tool wrapper 调用，最后 Session 中仍是 DSH `tool/call`/`tool/result`。
+- [ ] MCP tests start DSH's fixture server, register an `mcp__*` tool through DSH MCP Client, invoke it through the Pi tool wrapper, and verify Session still records DSH `tool/call`/`tool/result`.
 
-- [ ] MCP configuration E2E 按 AC-009 固定执行：create disabled stdio -> credential set -> enable -> call -> add HTTP -> make stdio fail -> HTTP/builtin 仍可用 -> stale revision update -> acknowledged rename -> reconnect -> remove。每一步都断言 Host snapshot、当前 Agent tool schema 和 DSH Session 历史；测试 secret 不能出现在 DOM、Remote snapshot、日志或 Session。
+- [ ] MCP configuration E2E follows AC-009 exactly: create disabled stdio -> credential set -> enable -> call -> add HTTP -> make stdio fail -> HTTP/builtin remain available -> stale revision update -> acknowledged rename -> reconnect -> remove. Each step asserts Host snapshot, current Agent tool schema, and DSH Session history; test secrets must not appear in DOM, Remote snapshots, logs, or Session.
 
-- [ ] Session library E2E 只复用 DSH commands/UI：首个完成 turn 生成且只生成一次 `session/title`、手工 rename 后重启且不被自动标题覆盖、首次正文查询触发 `first-search`、archive 后默认列表隐藏、archive filter 恢复、fork 的最后 event 是平衡 turn、Header 与 `/export` 内容一致。破坏 SQLite 后会话仍能直接打开，重建失败不改变 Session available 状态。
+- [ ] Session-library E2E reuses only DSH commands/UI: the first completed turn generates exactly one `session/title`; manual rename survives restart without automatic-title overwrite; first body query triggers `first-search`; archive hides from the default list and the archive filter restores visibility; the final fork event is a balanced turn; Header and `/export` contents match. Sessions still open directly after SQLite corruption; failed rebuilding does not change Session available state.
 
-- [ ] 保留 DSH 已有日常会话交互回归：`message-actions` 的 copy/只在完成 turn 分叉，`chat-continuous-conversation` 的连续多 turn，`queue-actions` 的队列编辑，`steering` 的 next-step，以及 `message-feedback` 的用户反馈。这些测试在新默认组合下运行；不得为了通过而指回 ReactLoopAgent。
+- [ ] Preserve existing DSH everyday-session regression coverage: `message-actions` copy/fork only at completed turns, `chat-continuous-conversation` multiple continuous turns, `queue-actions` queue editing, `steering` next-step, and `message-feedback` user feedback. Run these tests under the new default composition; never point them back to ReactLoopAgent to pass.
 
-- [ ] Diff/Terminal 回归：用 Pi 调用 patch 和 PowerShell，Diff card 显示 durable file delta，Terminal card/`pwsh-terminal.e2e.ts` 显示退出码、截断和取消；刷新后从 durable event 恢复，不依赖 Pi runtime frame。
+- [ ] Diff/Terminal regression: invoke patch and PowerShell through Pi; Diff cards show durable file deltas, Terminal cards/`pwsh-terminal.e2e.ts` show exit codes, truncation, and cancellation; refresh restores from durable events without Pi runtime frames.
 
-- [ ] PDF test只验证附件引用和预览，明确没有编辑按钮。Web test验证 `web_fetch`/`web_search` 仍进入 DSH egress/approval；不引入 Playwright/Computer-use 产品依赖。
+- [ ] PDF tests verify attachment references and previews only, with explicitly no edit button. Web tests verify `web_fetch`/`web_search` still pass through DSH egress/approval; add no Playwright/Computer-use product dependency.
 
-- [ ] 运行能力 E2E。
+- [ ] Run capability E2E.
 
   Run:
 
@@ -538,7 +546,7 @@
   pnpm exec vitest run --config vitest.web.config.ts apps/web/tests/goal-bar.e2e.ts apps/web/tests/plan-control-row.e2e.ts apps/web/tests/skill-user-invoke.e2e.ts apps/web/tests/mcp-tool-through-pi.e2e.ts apps/web/tests/mcp-configuration.e2e.ts apps/web/tests/document-preview.e2e.ts apps/web/tests/web-tools-through-pi.e2e.ts apps/web/tests/session-library-through-pi.e2e.ts apps/web/tests/diff-through-pi.e2e.ts apps/web/tests/message-actions.e2e.ts apps/web/tests/chat-continuous-conversation.e2e.ts apps/web/tests/queue-actions.e2e.ts apps/web/tests/steering.e2e.ts apps/web/tests/message-feedback.e2e.ts apps/web/tests/pwsh-terminal.e2e.ts apps/web/tests/navigation-panes.e2e.ts apps/web/tests/workspace-management.e2e.ts
   ```
 
-- [ ] 提交。
+- [ ] Commit.
 
   Run:
 
@@ -547,7 +555,7 @@
   git commit -m "test: prove DSH capabilities through the Pi loop"
   ```
 
-## Task C8：把 Alpha 更新改为手动检查和手动下载
+## Task C8: Make Alpha updates manual checks and manual downloads
 
 **Files:**
 
@@ -560,19 +568,19 @@
 - Modify: `apps/desktop/tests/update-coordinator.spec.ts`
 - Modify: `apps/desktop/tests/desktop-auto-update-environment.spec.ts`
 
-- [ ] 先写失败测试：启动后不自动 check；`autoDownload=false`；没有 install/quitAndInstall IPC；手工检查发现版本时只返回 HTTPS download page；非法或 HTTP download page 被拒绝；检查失败不阻止启动且不循环弹窗。
+- [ ] First write failing tests: no automatic check after startup; `autoDownload=false`; no install/quitAndInstall IPC; manual checks return only an HTTPS download page for available versions; reject invalid/HTTP download pages; failed checks neither block startup nor repeatedly open dialogs.
 
-- [ ] 删除启动后的 `setTimeout(() => checkAndPrompt(false), 10_000)` 行为。保留菜单“检查更新”。
+- [ ] Remove startup `setTimeout(() => checkAndPrompt(false), 10_000)` behavior. Retain the “Check for updates” menu.
 
-- [ ] `DesktopUpdateState` 的 available arm 增加 `downloadUrl`，来源为打包环境显式配置的 HTTPS release page。主进程用 Electron `shell.openExternal()` 打开；sender 校验和 URL 再验证必须在 main process 完成。
+- [ ] Add `downloadUrl` to the available arm of `DesktopUpdateState`, sourced from an explicitly configured HTTPS release page in the packaging environment. Main process opens it with Electron `shell.openExternal()`; sender validation and URL revalidation must occur in main process.
 
-- [ ] 移除 renderer 可调用的 install 方法和 `updatesInstall` channel。V1 不调用 `downloadUpdate()` 或 `quitAndInstall()`；签名自动安装代码可以保留为未接线的 V1.1 基础，但 boundary test 必须证明不可达。
+- [ ] Remove the renderer-callable install method and `updatesInstall` channel. V1 never calls `downloadUpdate()` or `quitAndInstall()`; signed auto-install code may remain as unwired V1.1 groundwork, but boundary tests must prove it unreachable.
 
-- [ ] 运行测试。
+- [ ] Run tests.
 
   Run: `pnpm vitest run apps/desktop/tests/update-coordinator.spec.ts apps/desktop/tests/desktop-auto-update-environment.spec.ts apps/desktop/tests/locale.spec.ts`
 
-- [ ] 提交。
+- [ ] Commit.
 
   Run:
 
@@ -581,7 +589,7 @@
   git commit -m "feat: make Alpha updates check-and-download only"
   ```
 
-## Task C9：完成 Windows V1 E2E、发布证据和 Draft PR
+## Task C9: Complete Windows V1 E2E, release evidence, and Draft PR
 
 **Files:**
 
@@ -595,15 +603,15 @@
 - Create: `.agents/notes/architecture/2026-09-10-v1-client-capability-surfaces.md`
 - Modify: `README.md`
 
-- [ ] Desktop E2E 运行真实 Electron + mock OpenAI server，覆盖：首次模型 onboarding、打开/reopen workspace、创建/重命名/搜索/归档/恢复/分叉/导出 session、流式 reply、审批 allow/deny、Diff、Terminal、steer、queue、cancel、Goal、Plan、Skill、MCP 图形化配置与调用、附件、PDF 预览、About/离线许可、退出恢复。
+- [ ] Desktop E2E runs real Electron plus mock OpenAI server, covering first model onboarding, open/reopen workspace, create/rename/search/archive/restore/fork/export session, streaming reply, approval allow/deny, Diff, Terminal, steer, queue, cancel, Goal, Plan, Skill, graphical MCP configuration/calls, attachments, PDF previews, About/offline licenses, and exit/recovery.
 
-- [ ] 测试直接终止 Host 进程验证三类 durability barrier；重启后从 DSH Session 打开。断言 SQLite 缺失时正文仍可打开，重建后搜索恢复；使用小 window mock 完成 AC-010 automatic/context-overflow/manual compaction 三条路径。
+- [ ] Tests directly terminate the Host process to verify all three durability barriers; restart opens from DSH Session. Assert session bodies still open without SQLite and search recovers after rebuilding; use a small-window mock to complete all three AC-010 automatic/context-overflow/manual compaction paths.
 
-- [ ] 增加 `measure-local-harness-v1.ts`：同一 mock provider、固定工作区和硬件上分别启动固定 DSH root 与候选 root。冷启动和首个 Host assistant delta 到 DOM 呈现延迟每组预热 2 次、采样 10 次；进程树空闲内存在 ready 后无任务 60 秒时采集 Electron + Host 全部子进程 working set，每组 5 次；1000 会话列表用同一可重复 fixture 生成器写入两个独立 DSH_HOME，从 Session Query 请求开始到列表 DOM 稳定采样 10 次。不从用户 profile 复制数据。
+- [ ] Add `measure-local-harness-v1.ts`: launch pinned DSH and candidate roots using the same mock provider, fixed workspace, and hardware. For cold start and latency from first Host assistant delta to DOM presentation, warm up twice and sample ten times per group; for idle process-tree memory, capture working sets of all Electron/Host child processes after ready and 60 seconds without tasks, five samples per group; generate 1000 sessions in two independent DSH_HOME directories using the same repeatable fixture generator, then sample ten times from Session Query request to stable list DOM. Never copy user-profile data.
 
-  输出 JSON 必须包含两端 commit、Node/Electron/Windows 版本、原始样本和四项阈值结论；冷启动中位数回退超过 15%、附加延迟超过 100ms、空闲进程树内存回退超过 20%，或 1000 会话列表中位数回退超过 15% 时退出非零。单元测试用确定时钟/进程样本验证 median、进程树求和、阈值和 JSON 脱敏。
+  Output JSON must include both commits, Node/Electron/Windows versions, raw samples, and conclusions for all four thresholds; exit nonzero if cold-start median regresses over 15%, added latency exceeds 100ms, idle process-tree memory regresses over 20%, or 1000-session list median regresses over 15%. Unit tests use deterministic clock/process samples to verify median, process-tree summation, thresholds, and JSON redaction.
 
-  `package.json` 增加固定入口：
+  Add fixed entries to `package.json`:
 
   ```json
   {
@@ -613,13 +621,13 @@
   }
   ```
 
-  脚本启动前必须验证 baseline root 的 HEAD 等于固定 DSH hash、两个 root 的 build artifacts 均存在，缺失时给出构建命令并退出，不自动安装依赖或下载文件。
+  Before launch, the script must verify baseline root HEAD equals the pinned DSH hash and both roots have build artifacts; if missing, print build commands and exit without automatically installing dependencies or downloading files.
 
-- [ ] Desktop E2E 使用唯一 marker 文本覆盖诊断日志脱敏：默认日志、错误、redacted diagnostic export 和 release evidence 不得出现 API key、MCP credential、最终 HTTP header、prompt、assistant 正文、工具 raw output、文件内容或附件字节。完整 Session export 属于用户明确选择的内容导出，必须先显示内容警告，不把它错误断言为脱敏包。另验证 capability stores、MCP per-id reconcile queue、tool commit buffer、listener queues 有明确上界，cancel/dispose 后没有 timer、subscriber、MCP child process 或 Session write handle 泄漏。
+- [ ] Desktop E2E uses unique marker text to cover diagnostic-log redaction: default logs, errors, redacted diagnostic export, and release evidence must contain no API key, MCP credential, final HTTP header, prompt, assistant body, raw tool output, file content, or attachment bytes. Full Session export is a user-selected content export requiring a content warning first; never incorrectly assert it is redacted. Also verify explicit bounds on capability stores, MCP per-id reconciliation queues, tool commit buffers, and listener queues, with no timer, subscriber, MCP child process, or Session write-handle leaks after cancel/dispose.
 
-- [ ] 发布限制明确列出：无 Qwen Code 内核、无公开 OpenAI 入站 gateway、无 Office/PDF 编辑、无完整浏览器自动化、无自动安装更新、macOS/Linux 不作 V1 二进制门禁。
+- [ ] Release limitations explicitly list: no Qwen Code kernel, public OpenAI inbound gateway, Office/PDF editing, full browser automation, or automatic update installation; macOS/Linux are not V1 binary gates.
 
-- [ ] 运行完整门禁。
+- [ ] Run all gates.
 
   Run:
 
@@ -641,9 +649,9 @@
   git diff --check
   ```
 
-- [ ] 在干净 Windows 11 x64 环境先校验 NSIS 文件 SHA-256，完成安装 -> 首次启动 -> 本地和云端 model smoke -> 退出 -> 卸载，并确认用户选定的 workspace 文件未被卸载器删除。只把结果、artifact hash、模型 id、route 类型和时间写入 checklist，不记录 baseURL query、headers 或 key；checklist 明示该 Alpha 未签名及可能的 SmartScreen 警告。
+- [ ] On clean Windows 11 x64, verify NSIS SHA-256 first, then install -> first launch -> local/cloud model smoke -> exit -> uninstall, confirming the uninstaller preserves user-selected workspace files. Record only results, artifact hash, model id, route type, and time in the checklist, never baseURL queries, headers, or keys; explicitly state the Alpha is unsigned and may trigger SmartScreen warnings.
 
-- [ ] 提交证据、推送并创建 Draft PR。
+- [ ] Commit evidence, push, and create a Draft PR.
 
   Run:
 
@@ -654,11 +662,11 @@
   gh pr create --draft --title "feat: complete the Local-Harness-pi V1 desktop flow" --body-file .\.github\pull_request_template.md
   ```
 
-  不得在本步骤自动合并 PR 或创建公开 Release；由项目所有者审阅三个检查点后决定。
+  Do not automatically merge the PR or create a public Release here; the project owner decides after reviewing all three checkpoints.
 
-## PR-C 工期与交接门禁
+## PR-C effort and handoff gates
 
-- 预计净工作量：7–9 个工作日，约 1.0–1.4 个 GPT-5.6 Sol Plus 完整周额度；其中共享 guarded-fetch 和模型/MCP 两端接线约 1–1.5 日，已取代原本两份重定向实现，不再另加重复工期。
-- Day 1：C1；Day 2：C2；Day 3–4：C3 Host MCP；Day 4–5：C4–C5 UI；Day 5–7：C6–C8；Day 7–9：C9、Windows 包和修复。任务有重叠日只表示同一工作日内顺序切换，不授权平行修改同一文件。
-- C3 是最长风险项：若 CAS、credential redaction、单 server reconcile 或 root-scope visibility 任一测试失败，不得通过改成浏览器本地配置、每 session 配置或 Pi MCP Client 绕过。
-- 可结束条件：AC-001–AC-010、TEST-005/006、Windows unpacked 与未签名 NSIS 安装/卸载 smoke、四项性能门禁和完整发布门禁通过，Draft PR 描述列出实际模型 smoke 与所有已知限制。
+- Estimated net effort: 7–9 working days, approximately 1.0–1.4 full GPT-5.6 Sol Plus weekly quotas; shared guarded-fetch and model/MCP wiring take approximately 1–1.5 days, replacing the two separate redirect implementations without adding duplicate effort.
+- Day 1: C1; day 2: C2; days 3–4: C3 Host MCP; days 4–5: C4–C5 UI; days 5–7: C6–C8; days 7–9: C9, Windows packages, and fixes. Overlapping days mean sequential switching within a workday, not authorization to edit the same file in parallel.
+- C3 is the longest risk item: if any CAS, credential-redaction, per-server reconciliation, or root-scope visibility test fails, never bypass it with browser-local configuration, per-session configuration, or a Pi MCP Client.
+- Completion requires AC-001–AC-010, TEST-005/006, Windows unpacked and unsigned NSIS install/uninstall smoke, all four performance gates, and all release gates to pass; the Draft PR description lists actual model smoke tests and all known limitations.

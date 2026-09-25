@@ -2,6 +2,8 @@
 
 [English](2026-09-10-local-harness-pi-pr-a-dsh-baseline.md) | 中文
 
+标为 `ts design` 的代码是待实施设计片段，只验证语法，不代表当前可调用的 API；省略的宿主依赖在对应实施任务中接线，并须通过源码类型检查和契约测试。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 把固定 DSH 快照导入新仓库，保留来源与内部兼容标识，完成 Local-Harness-pi 产品品牌、离线 About/第三方许可、Windows 数据隔离和 Electron 安全基线，提取行为中性的 Agent machine 构造 seam，并证明未接 Pi 时平台仍可构建运行。
@@ -18,7 +20,7 @@
 
 - DSH：根 `AGENTS.md`、`BRAND_GUIDELINES.md`、`docs/architecture.md`、`docs/defensive-patterns.md`、`docs/cookbook/adding-a-package.md`、`scripts/check-workspace-constraints.ts`、`scripts/client-build-environment.ts`；`apps/desktop/src/main.ts`、`host-process.ts`、`paths.ts`、`ipc.ts`、`preload.ts`、`project-manager.ts`、`update-coordinator.ts`、`electron-builder.config.mjs` 及对应 `apps/desktop/tests/*.spec.ts`；`apps/web/public/manifest.webmanifest`、`apps/web/index.html`、`packages/client/ui-brand-official`、`packages/client/ui-settings-models` 与 `packages/bundle/web-app` 的品牌、welcome、system-prompt 实现和测试；`packages/core/agent-loop/src/index.ts`、`agent.ts`、全部 lifecycle tests，以及 `packages/core/agent/src/types.ts`、`runtime-types.ts`。
 - Codex：桌面安全、设置和 Composer 入口相关实现；只参考交互与安全原则，不复制 Apache-2.0 代码。
-- Pi：本 PR 不接入运行时，只核对 `packages/agent/package.json` 的许可证和版本。
+- Pi：本 PR 不接入运行时，只核对 Pi 的 `packages` 目录下的 `agent/package.json` 的许可证和版本。
 
 ## Task A1：导入固定 DSH 源码快照
 
@@ -253,7 +255,7 @@
 
 - [ ] 先写产品身份测试，断言 builder 配置包含：
 
-  ```ts
+  ```ts design
   expect(config.productName).toBe('Local-Harness-pi')
   expect(config.artifactName).toBe('local-harness-pi-${version}-${os}-${arch}.${ext}')
   expect(config.appId).toBe('io.localharness.pi')
@@ -314,7 +316,7 @@
 
   为避免一次无产品价值的全 workspace 版本改写，V1 Alpha 直接继承固定 DSH 基线已一致的 `0.1.5-alpha.2`。该包是 `@local-harness/*` private workspace member，不进入 DSH npm release family；A2 增加的 Local verifier 单独要求它与根版本一致并禁止 publish。
 
-  ```ts
+  ```ts design
   export const productIdentity = Object.freeze({
     name: 'Local-Harness-pi',
     version: '0.1.5-alpha.2',
@@ -378,15 +380,17 @@
 
 - [ ] 在 `main.ts` 只计算一次根路径：
 
-  ```ts
+  ```ts design
   const harnessHome = join(app.getPath('userData'), 'harness')
   const paths = resolveDesktopPaths(harnessHome)
   ```
 
   `DesktopHostProcess` 构造函数增加 `harnessHome: string`，spawn env 增加：
 
-  ```ts
-  DSH_HOME: this.harnessHome,
+  ```ts design
+  const environment = {
+    DSH_HOME: this.harnessHome,
+  }
   ```
 
   `startHost()` 的活动和 health-check 路径全部传同一个 `harnessHome`。不得从 renderer 或 settings 接受该路径。
@@ -416,7 +420,7 @@
 
 - [ ] 先写失败测试，覆盖主窗口和插件窗口：
 
-  ```ts
+  ```ts design
   expect(options.webPreferences).toMatchObject({
     nodeIntegration: false,
     contextIsolation: true,
@@ -434,7 +438,7 @@
 
 - [ ] 把现有 BrowserWindow options 原样提取为纯函数：
 
-  ```ts
+  ```ts design
   export function desktopWindowOptions(preload: string): BrowserWindowConstructorOptions {
     return {
       width: 1280,

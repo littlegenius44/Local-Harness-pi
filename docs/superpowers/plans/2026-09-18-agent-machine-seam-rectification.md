@@ -2,6 +2,8 @@
 
 English | [中文](2026-09-18-agent-machine-seam-rectification.zh.md)
 
+Fences marked `ts design` are planned implementation excerpts checked for syntax only, not available APIs. Their omitted host dependencies must be wired and pass source typechecking and contract tests in the owning implementation task.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Integrate the Pi conversational tool-loop without duplicating the DSH `AgentFactory` lifecycle, and make the message boundary, single source of truth, and PR-B prerequisites directly implementable.
@@ -54,7 +56,7 @@ Before continuing PR-A, the other task must:
 
 - [ ] Add the minimal public seam in `index.ts`. Names may be adjusted for existing upstream export conflicts, but the shape must remain equivalent:
 
-  ```ts
+  ```ts design
   import type { Scope } from '@deepseek-ai/dsh-scope'
 
   export interface AgentLoopMachine extends Agent {
@@ -77,7 +79,7 @@ Before continuing PR-A, the other task must:
 
   Change `PreparedAgent.agent` and the internal `machine` type to `AgentLoopMachine`, and replace the sole direct construction site with:
 
-  ```ts
+  ```ts design
   machine = this.createMachine({ ctx: loopCtx, id, options, session })
   ```
 
@@ -112,7 +114,7 @@ Before continuing PR-A, the other task must:
 
 - [ ] Use `readonly Message[]` for `KernelContextSnapshot.messages` and `KernelRunInput.initialMessages`; DSH `Message` for message started/completed (narrow to `AssistantMessage` only when proven assistant-only); DSH `StreamChunk` for deltas; and `readonly ContentBlock[]` for tool result content.
 
-  ```ts
+  ```ts design
   import type { ContentBlock, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
 
   export interface KernelContextSnapshot {
@@ -152,7 +154,7 @@ Before continuing PR-A, the other task must:
 
 - [ ] Add a workspace production dependency from `@local-harness/pi-agent-loop` to `@deepseek-ai/dsh-agent-loop`. Inherit the lifecycle without copying its source:
 
-  ```ts
+  ```ts design
   import { AgentLoop, type AgentLoopMachine, type AgentMachineCreateInput } from '@deepseek-ai/dsh-agent-loop'
 
   export class PiAgentLoop extends AgentLoop {

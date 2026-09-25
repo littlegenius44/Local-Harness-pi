@@ -20,7 +20,7 @@ This checkout is under development acceptance. No usable V1 installer has been r
 <a id="run-from-source"></a>
 ## Verify from source
 
-The completed build used Node.js 24.17.0 and the repository-pinned pnpm 11.7.0. After installing dependencies, `pnpm run build:official` builds the frontend and backend, and `pnpm run build:desktop` compiles the desktop shell. The Windows development packaging entry is `pnpm run package:desktop:win:x64:dir`; packaging and launch acceptance remain incomplete.
+The completed build used Node.js 24.17.0 and the repository-pinned pnpm 11.7.0. After installing dependencies, `pnpm run build:official` builds the frontend and backend, and `pnpm run build:desktop` compiles the desktop shell. The Windows development packaging entry is `pnpm run package:desktop:win:x64:dir`; the baseline installer, first launch, restart, and uninstall have been exercised in isolated local directories. See the [acceptance record](.agents/notes/proposed/architecture/2026-09-12-local-harness-pi-baseline-and-isolation.md) for commands, packaging limitations, and slow cold-start observations.
 
 ## Documents
 
@@ -44,7 +44,7 @@ The completed build used Node.js 24.17.0 and the repository-pinned pnpm 11.7.0. 
 - V1/V1.1 scope: confirmed
 - Requirements and contracts: confirmed
 - Implementation plans: complete
-- PR-A: source imported, complete build passed, documentation and packaging acceptance in progress
+- PR-A: source imported, baseline builds/tests/documentation and isolated installer smoke passed; Draft PR handoff in progress
 - PR-B / PR-C: not started
 
 ## Upstream baseline

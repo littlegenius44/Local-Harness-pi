@@ -1,91 +1,93 @@
-# Local-Harness-pi V1 总体架构设计
+# Local-Harness-pi V1 Overall Architecture Design
 
-文档日期：2026-09-09
+English | [中文](2026-09-09-local-harness-pi-v1-design.zh.md)
 
-架构状态：已由项目所有者确认
+Document date: 2026-09-09
 
-文档状态：已确认
+Architecture status: confirmed by the project owner
 
-目标版本：V1
+Document status: confirmed
 
-## 1. 最终定义
+Target version: V1
 
-Local-Harness-pi 的 V1 架构固定为：
+## 1. Final definition
 
-> **DSH 产品平台 + Pi 对话式工具循环内核 + 单一 DSH 对话/执行恢复事实源。**
+The Local-Harness-pi V1 architecture is fixed as:
 
-这里的“替换 DSH 内核”有严格边界：仅替换 DSH 默认的 Agent Loop 执行实现，不替换 DSH 的 Electron 桌面壳、Web UI、Agent 注册与生命周期、会话事件模型、持久化、模型配置、工具注册与权限、Goal/Plan、Skills、MCP、附件、设置和插件平台。
+> **DSH product platform + Pi conversational tool-loop kernel + a single DSH source of conversation/execution recovery truth.**
 
-Pi 只负责一次 Agent 运行中的模型—工具—模型迭代、流式执行和运行中队列协同。Pi 不拥有持久化会话、不维护第二份可恢复 transcript、不加载第二套 Skills/MCP、不单独执行权限策略，也不独立决定模型配置。
+“Replacing the DSH kernel” has strict boundaries: replace only DSH's default Agent Loop execution implementation, retaining DSH's Electron shell, Web UI, Agent registration/lifecycle, session event model, persistence, model configuration, tool registration/permissions, Goal/Plan, Skills, MCP, attachments, settings, and plugin platform.
 
-## 2. 设计依据与固定来源
+Pi owns only model–tool–model iteration, streaming execution, and in-run queue coordination during one Agent run. It owns no persistent session, maintains no second recoverable transcript, loads no second Skills/MCP system, enforces no independent permission policy, and does not independently choose model configuration.
 
-本设计已按以下源码基线复核：
+## 2. Design basis and pinned sources
 
-| 来源 | 固定提交或版本 | 本项目采用内容 |
+This design was reviewed against these source baselines:
+
+| Source | Pinned commit or version | Adopted content |
 |---|---|---|
-| DeepSeek Harness | `b2e3b2a0125854567a4a5fcba75782e42fe84901` | Electron、Web UI、Cordis 组合、Agent/Session/LLM/Tools 服务、JSONL/Zstd 会话、SQLite 派生搜索、Goal/Plan、Skills/MCP、附件和更新框架 |
-| Pi | `acaa253cc8e3f159e6100b6f3874861b1f0bfc99`，npm `0.85.1` | `@earendil-works/pi-agent-core` 的 `Agent`/`runAgentLoop`、事件和工具调用循环 |
-| OpenAI Codex | `73a1148c9c775c2a4616ce5096291740a00ed68a` | 设置页和输入框“+”菜单的交互参考、工具审批与安全边界参考 |
+| DeepSeek Harness | `b2e3b2a0125854567a4a5fcba75782e42fe84901` | Electron, Web UI, Cordis composition, Agent/Session/LLM/Tools services, JSONL/Zstd sessions, derived SQLite search, Goal/Plan, Skills/MCP, attachments, and update framework |
+| Pi | `acaa253cc8e3f159e6100b6f3874861b1f0bfc99`, npm `0.85.1` | `Agent`/`runAgentLoop`, events, and tool-call loop from `@earendil-works/pi-agent-core` |
+| OpenAI Codex | `73a1148c9c775c2a4616ce5096291740a00ed68a` | Interaction reference for settings and the input “+” menu; reference for tool approval and safety boundaries |
 
-实施约束：
+Implementation constraints:
 
-1. 每个实施 PR 开始前，执行者必须重新阅读该 PR 涉及的 DSH、Pi 和 Codex 源文件。
-2. PR 描述必须记录实际使用的三个上游 commit hash；hash 发生变化时必须附兼容性差异。
-3. DSH 和 Pi 均按 MIT 许可证保留来源声明；Codex 只作设计参考，V1 不复制或链接其 Rust 运行时。
-4. 上游升级不得与功能修改混在同一 PR。
+1. Before each implementation PR, the implementer must reread the DSH, Pi, and Codex source files relevant to it.
+2. PR descriptions must record all three upstream commit hashes actually used; changed hashes require compatibility differences.
+3. Preserve MIT source attribution for DSH and Pi; Codex is a design reference only, and V1 neither copies nor links its Rust runtime.
+4. Never combine upstream upgrades with feature changes in one PR.
 
-## 3. 目标
+## 3. Goals
 
-V1 必须达到以下结果：
+V1 must deliver these outcomes:
 
-1. 用户可以在 Windows Electron 桌面应用中打开工作区、创建或恢复会话并完成真实代码任务。
-2. Agent 的执行行为由 Pi Agent Core 驱动，但所有可恢复状态只写入 DSH Session。
-3. 本地与云端模型均通过 OpenAI-compatible 接口配置和调用。
-4. DSH 的工具、审批、工作区限制、Goal、Plan、Skills 和 MCP 在 Pi 循环下保持可用。
-5. 前端沿用 DSH 整体布局，在设置页和输入框“+”菜单提供 Codex 风格的工具与能力入口。
-6. 异常退出后能够恢复已提交会话，不重复执行结果未知的副作用工具。
-7. 内核边界允许以后增加其他内核，但 V1 只交付 Pi。
+1. Users can open workspaces, create or restore sessions, and complete real coding tasks in a Windows Electron desktop app.
+2. Pi Agent Core drives Agent execution, while all recoverable state is written only to DSH Session.
+3. Local and cloud models are configured and called through OpenAI-compatible interfaces.
+4. DSH tools, approval, workspace restrictions, Goal, Plan, Skills, and MCP remain usable under the Pi loop.
+5. The frontend retains DSH's overall layout, with Codex-style tool/capability entries in settings and the input “+” menu.
+6. Abnormal exit allows recovery of committed sessions without reexecuting side-effecting tools whose outcomes are unknown.
+7. The kernel boundary permits future kernels, but V1 ships only Pi.
 
-## 4. 非目标
+## 4. Non-goals
 
-以下内容明确不属于 V1：
+The following are explicitly outside V1:
 
-- Qwen Code 内核、双内核运行或内核对比器。
-- 自研 Agent 微内核、全新的插件框架或全新的会话数据库。
-- Pi `AgentHarness` 的会话、JSONL、SQLite、Compaction、Skills 和完整 Coding Agent 外壳。
-- 对外提供 OpenAI `/v1/responses` 或 `/v1/chat/completions` 兼容服务器。V1 的 OpenAI-compatible 是模型出站调用契约，不是公开网关。
-- Anthropic Messages、Gemini 或厂商专有 API 的直接接入。
-- Codex 官方 Office/PDF 插件的复制或再分发。
-- Word/Excel/PDF 编辑、完整 Playwright 浏览器自动化、签名自动安装更新和全面安全加固。
-- 多 Agent 编排、远程执行节点、移动端或浏览器独立客户端。
+- Qwen Code kernel, dual-kernel execution, or a kernel comparator.
+- A custom Agent microkernel, new plugin framework, or new session database.
+- Pi `AgentHarness` Session, JSONL, SQLite, Compaction, Skills, and full Coding Agent shell.
+- A public OpenAI `/v1/responses` or `/v1/chat/completions` compatible server. V1 OpenAI-compatible means the outbound model-call contract, not a public gateway.
+- Direct Anthropic Messages, Gemini, or vendor-specific API integration.
+- Copying or redistributing official Codex Office/PDF plugins.
+- Word/Excel/PDF editing, full Playwright browser automation, signed automatic update installation, or comprehensive security hardening.
+- Multi-Agent orchestration, remote execution nodes, mobile clients, or standalone browser clients.
 
-这些排除项不能以“顺便重构”名义进入 V1。
+These exclusions must not enter V1 as incidental refactoring.
 
-## 5. 总体所有权
+## 5. Overall ownership
 
-| 能力 | V1 唯一所有者 | 说明 |
+| Capability | Sole V1 owner | Notes |
 |---|---|---|
-| 桌面进程、窗口、IPC、打包 | DSH Electron | 保留 DSH 主进程/Host 进程拆分 |
-| 前端布局与状态投影 | DSH Web/Client | 只做品牌与入口调整 |
-| Agent 注册、创建、恢复、销毁 | DSH `AgentRegistry`/`AgentFactory` | Pi 不注册第二个 Agent 身份 |
-| Agent 对话式工具循环 | Pi Agent Core | Loop Engine；由适配器托管，运行态可丢弃 |
-| 对话/执行事实源 | DSH `Session` + JSONL/Zstd | 所有影响恢复后模型行为的事实只追加到这里 |
-| 会话搜索 | DSH SQLite FTS | 派生索引，可删除并重建，不是事实源 |
-| 模型路由与凭据 | DSH LLM + `llm-pi-ai` | Pi 只接收当前请求的冻结模型描述 |
-| 工具目录、执行、审批、限制 | DSH Tools | Pi 工具只是代理包装 |
-| Goal、Plan | DSH Goal/Plan | 继续产生 DSH Session 事件 |
-| Skills、MCP | DSH Skill/MCP | 继续通过 DSH 工具和 Prompt 组装进入运行 |
-| 附件与 PDF 预览 | DSH Attachment/Preview | V1 只预览，不编辑 |
-| 更新 | DSH updater | Alpha 默认关闭自动安装，仅检查和手动下载提示 |
+| Desktop processes, windows, IPC, packaging | DSH Electron | Preserve the DSH main/Host process split |
+| Frontend layout and state projections | DSH Web/Client | Adjust branding and entry points only |
+| Agent registration, creation, recovery, disposal | DSH `AgentRegistry`/`AgentFactory` | Pi registers no second Agent identity |
+| Agent conversational tool loop | Pi Agent Core | Loop Engine; adapter-hosted, disposable runtime state |
+| Conversation/execution source of truth | DSH `Session` + JSONL/Zstd | Append every fact affecting recovered model behavior here only |
+| Session search | DSH SQLite FTS | Derived, disposable, rebuildable index, never the source of truth |
+| Model routing and credentials | DSH LLM + `llm-pi-ai` | Pi receives only the current request's frozen model description |
+| Tool catalog, execution, approval, restrictions | DSH Tools | Pi tools are proxy wrappers only |
+| Goal, Plan | DSH Goal/Plan | Continue producing DSH Session events |
+| Skills, MCP | DSH Skill/MCP | Continue entering runs through DSH tools and Prompt assembly |
+| Attachments and PDF preview | DSH Attachment/Preview | V1 previews only, no editing |
+| Updates | DSH updater | Alpha disables automatic installation by default; checks and manual-download prompts only |
 
-所有权冲突时以本表为准。任何新增组件都不得偷偷持久化第二份对话历史。这里的“事实源”特指对话与执行恢复：Decision、Evidence、Artifact 等领域对象可以由领域服务独立持久化，但不得复制 transcript、执行状态或绕过 DSH Session；影响后续模型行为的领域引用与状态变化必须以稳定 ref/event 进入 Session。
+This table resolves ownership conflicts. No new component may silently persist a second conversation history. “Source of truth” specifically concerns conversation and execution recovery: domain services may independently persist Decision, Evidence, Artifact, and similar domain objects, but must not duplicate transcripts/execution state or bypass DSH Session; domain references and state changes affecting later model behavior must enter Session through stable refs/events.
 
-## 6. 源码组合策略
+## 6. Source composition strategy
 
-`Local-Harness-pi` 是一个新的 GitHub 仓库，不是运行时同时启动三个仓库。首个源码导入应采用固定 DSH 快照，保留 DSH 原许可证和来源；随后只在本仓库中维护必要差异。
+`Local-Harness-pi` is a new GitHub repository, not three repositories launched together at runtime. The initial source import should use a pinned DSH snapshot, preserving its original license and attribution; maintain only necessary differences in this repository afterward.
 
-Pi 不整仓复制。V1 增加精确版本依赖：
+Do not copy the entire Pi repository. V1 adds an exact-version dependency:
 
 ```json
 {
@@ -95,9 +97,9 @@ Pi 不整仓复制。V1 增加精确版本依赖：
 }
 ```
 
-DSH 已使用 `@earendil-works/pi-ai@0.85.1`。两个 Pi 包必须保持同一版本。包管理锁文件是发布输入的一部分，不允许范围升级。
+DSH already uses `@earendil-works/pi-ai@0.85.1`. Both Pi packages must stay at the same version. The package-manager lockfile is a release input; range-based upgrades are forbidden.
 
-建议新增包：
+Proposed new package:
 
 ```text
 packages/core/agent-loop-pi/
@@ -113,26 +115,26 @@ packages/core/agent-loop-pi/
   tests/
 ```
 
-PR-A 必须先在 DSH `packages/core/agent-loop` 提取行为中性的 protected machine-construction seam，默认仍构造 `ReactLoopAgent`。该包继承 DSH `AgentLoop`，只覆盖该 seam 以构造 `DshPiAgent`；不得复制 `AgentFactory`、SessionPreparation、创建/恢复、registry 发布或逆序清理代码。这样上游生命周期修复由两种 machine 自动共享，同时默认组合仍只装载一个 AgentFactory。
+PR-A must first extract a behavior-neutral protected machine-construction seam in DSH `packages/core/agent-loop`, still constructing `ReactLoopAgent` by default. The new package inherits DSH `AgentLoop` and overrides only that seam to construct `DshPiAgent`; it must not duplicate `AgentFactory`, SessionPreparation, creation/recovery, registry publication, or reverse-order cleanup. Both machines thereby share upstream lifecycle fixes automatically, while default composition still loads one AgentFactory.
 
-默认组合文件中：
+In default composition:
 
-- 移除激活的 `@deepseek-ai/dsh-agent-loop` 条目。
-- 在相同位置激活 `@local-harness/pi-agent-loop`。
-- 保持其余 DSH 服务顺序和配置不变。
-- 启动时若发现零个或多个 AgentFactory，必须立即失败并给出可定位错误。
+- Remove the activated `@deepseek-ai/dsh-agent-loop` entry.
+- Activate `@local-harness/pi-agent-loop` at the same position.
+- Preserve all other DSH service ordering and configuration.
+- Fail immediately with a locatable error if startup finds zero or multiple AgentFactories.
 
-## 7. 为什么使用 Pi Agent Core 而不是 Pi AgentHarness
+## 7. Why Pi Agent Core instead of Pi AgentHarness
 
-Pi `AgentHarness` 已经包含自己的 Session、JSONL、SQLite、恢复、Compaction、Skills、Tools 和运行时驱动。把它整体放入 DSH 会形成两个持久化面和两个生命周期面，正是本项目要避免的问题。
+Pi `AgentHarness` already has its own Session, JSONL, SQLite, recovery, Compaction, Skills, Tools, and runtime driver. Embedding all of it in DSH creates two persistence and lifecycle systems, precisely what this project avoids.
 
-V1 允许导入：
+V1 allows importing:
 
 - `Agent`
-- `runAgentLoop` / `runAgentLoopContinue`（若具体实现需要）
-- `AgentEvent`、`AgentTool`、`AgentContext` 等 Agent Core 类型
+- `runAgentLoop` / `runAgentLoopContinue` (if required by the implementation)
+- Agent Core types such as `AgentEvent`, `AgentTool`, and `AgentContext`
 
-V1 禁止运行时依赖：
+V1 forbids runtime dependencies on:
 
 - `@earendil-works/pi-agent-core/harness/session`
 - Pi JSONL/SQLite session backend
@@ -140,277 +142,277 @@ V1 禁止运行时依赖：
 - Pi Harness skills loader
 - Pi Harness built-in coding tools
 
-依赖检查应作为 CI 门禁：生产依赖图中出现以上禁用入口即失败。
+Dependency checking must be a CI gate: any forbidden entry above in the production dependency graph fails it.
 
-## 8. Agent 运行边界
+## 8. Agent runtime boundaries
 
-适配层由三层组成：
+The adapter has three layers:
 
-1. `PiAgentLoop`：继承 DSH `AgentLoop`，只覆盖 protected `createMachine()`；`AgentFactory` 生命周期完全由父类拥有。
-2. `DshPiAgent`：实现 DSH `Agent` 运行接口，拥有 DSH Inbox、状态和 Pi 运行实例。
-3. `PiKernelDriver`：唯一与 Pi Agent Core 直接交互的组件，暴露稳定、内核无关的最小 conversational tool-loop 接口；V1 不把它定义成通用 agent graph/runtime。
+1. `PiAgentLoop`: inherits DSH `AgentLoop` and overrides only protected `createMachine()`; the superclass owns the entire `AgentFactory` lifecycle.
+2. `DshPiAgent`: implements the DSH `Agent` runtime interface and owns DSH Inbox, state, and the Pi runtime instance.
+3. `PiKernelDriver`: the sole component interacting directly with Pi Agent Core; it exposes a stable, kernel-independent minimal conversational tool-loop interface, not a general agent graph/runtime in V1.
 
-Pi Agent 的 transcript 只是当前进程中的派生缓存：
+The Pi Agent transcript is only a derived cache in the current process:
 
-- 新建和恢复时从 DSH Session surface 投影。
-- 每个 Pi turn 开始前再次以 DSH Session 重建上下文、工具和模型。
-- Pi 最终事件先翻译并提交到 DSH Session，才可向上报告稳定完成。
-- 进程退出后 Pi 状态直接丢弃；恢复只读 DSH。
+- Project from the DSH Session surface on creation and recovery.
+- Rebuild context, tools, and model from DSH Session before every Pi turn.
+- Translate and commit final Pi events to DSH Session before reporting stable completion upward.
+- Discard Pi state at process exit; recovery reads only DSH.
 
-这保证以后增加另一个 KernelDriver 时无需改变会话格式或前端协议。
+This allows a future KernelDriver without changing session format or frontend protocol.
 
-## 9. Turn/Step 语义对齐
+## 9. Turn/Step semantic alignment
 
-DSH 与 Pi 对 “turn” 的定义不同，因此必须固定如下映射：
+DSH and Pi define “turn” differently, so fix this mapping:
 
-| Pi 生命周期 | DSH 语义 |
+| Pi lifecycle | DSH semantics |
 |---|---|
-| 一次 `Agent.prompt()`/低层 run | 一个 DSH turn |
-| Pi `turn_start` | 一个 DSH `step/start` |
-| Pi 一次 assistant 响应及其工具批次 | 一个 DSH step |
+| One `Agent.prompt()`/low-level run | One DSH turn |
+| Pi `turn_start` | One DSH `step/start` |
+| One Pi assistant response and its tool batch | One DSH step |
 | Pi `turn_end` | DSH `step/end` |
 | Pi `agent_end` | DSH `turn/end` |
 
-DSH `next-step` Inbox 对应 Pi steering 边界；DSH `next-turn` Inbox 始终保持为下一次独立 DSH turn，不得接入 Pi follow-up queue。
+DSH `next-step` Inbox corresponds to the Pi steering boundary; DSH `next-turn` Inbox always remains the next independent DSH turn and must never enter the Pi follow-up queue.
 
-初始输入和中途 steering 都先通过 DSH `agent/pre-step` 扩展点。被拒绝的 step 不得触发模型请求。System Prompt、工具 schema、模型配置和会话历史在每个 step 开始前从 DSH 重建。
+Initial input and in-run steering both pass through DSH `agent/pre-step` first. Rejected steps must issue no model request. Rebuild System Prompt, tool schemas, model configuration, and session history from DSH before each step.
 
-## 10. 事件提交原则
+## 10. Event commit principles
 
-Pi 事件不是持久化协议。适配器将其映射为两类输出：
+Pi events are not a persistence protocol. The adapter maps them to two output classes:
 
-- Durable：追加到 DSH Session 的正式事件。
-- Ephemeral：只用于流式 UI 的进程内事件，最终必须由 durable event 收敛替换。
+- Durable: official events appended to DSH Session.
+- Ephemeral: in-process events for streaming UI only, ultimately converging through replacement by durable events.
 
-关键映射：
+Key mappings:
 
-| Pi 事件 | 处理 |
+| Pi event | Handling |
 |---|---|
-| `agent_start` | 发布 DSH `agent/status=running`，不写第二份记录 |
-| `turn_start` | 追加 `step/start` |
-| user `message_end` | 追加已通过 pre-step 的 `user/message`，同一 messageId 只写一次 |
-| assistant `message_update` | 发布 `agent/assistant-stream`，不落独立 UI 数据库 |
-| assistant `message_end` | 追加 `assistant/message` 或失败时 `assistant/attempt` |
-| `tool_execution_start` | 追加 `tool/call` 后才允许进入 DSH 工具执行管线 |
-| `tool_execution_update` | 仅发布瞬时进度 |
-| tool-result `message_end` | 按模型调用顺序追加 `tool/result`，引用对应 call seq |
-| `turn_end` | 追加 `step/end` |
-| `agent_end` | 追加 `turn/end`，随后状态收敛为 idle |
+| `agent_start` | Publish DSH `agent/status=running` without a second record |
+| `turn_start` | Append `step/start` |
+| user `message_end` | Append the pre-step-approved `user/message`, once per messageId |
+| assistant `message_update` | Publish `agent/assistant-stream`, with no separate UI database |
+| assistant `message_end` | Append `assistant/message`, or `assistant/attempt` on failure |
+| `tool_execution_start` | Append `tool/call` before allowing entry into the DSH tool execution pipeline |
+| `tool_execution_update` | Publish transient progress only |
+| tool-result `message_end` | Append `tool/result` in model-call order, referencing the corresponding call seq |
+| `turn_end` | Append `step/end` |
+| `agent_end` | Append `turn/end`, then converge to idle |
 
-并行工具可能按完成时间发出 `tool_execution_end`，但 durable `tool/result` 必须按 assistant 中的源顺序提交。适配器必须维护有界重排缓冲区，不能用完成顺序写日志。
+Parallel tools may emit `tool_execution_end` in completion order, but durable `tool/result` must commit in assistant source order. The adapter must maintain a bounded reorder buffer, never log by completion order.
 
-`Session.append()` 是逻辑提交而不是通用的抗崩溃承诺。V1 额外要求以下 durability barrier：用户消息向 Client 确认为已接纳前、每个 `tool/call` 进入实际工具执行前、`turn/end` 对外完成和 Agent 进入 idle 前，必须对该 Session 的 write handle 执行并成功完成 `flush()`。flush 失败立即停止运行。
+`Session.append()` is a logical commit, not a general crash-durability promise. V1 additionally requires successful `flush()` on the Session write handle before acknowledging user-message acceptance to Client, before each `tool/call` enters actual execution, and before externally completing `turn/end` and entering idle. Stop the run immediately if flush fails.
 
-## 11. 模型平面
+## 11. Model plane
 
-DSH 设置和 `llm-pi-ai` 是唯一模型配置所有者。V1 支持两类 OpenAI-compatible route：
+DSH settings and `llm-pi-ai` are the sole model-configuration owners. V1 supports two OpenAI-compatible route classes:
 
-- Local：loopback 地址上的 llama.cpp、Ollama、LM Studio、vLLM 或其他兼容服务。
-- Cloud：HTTPS 上的 OpenAI 或兼容云提供商。
+- Local: llama.cpp, Ollama, LM Studio, vLLM, or another compatible service on loopback.
+- Cloud: OpenAI or a compatible cloud provider over HTTPS.
 
-每个 route 明确声明 `openai-responses` 或 `openai-completions` wire API。不得仅依靠 URL 猜测协议。
+Every route explicitly declares `openai-responses` or `openai-completions` wire API. Never infer protocol from URL alone.
 
-Pi 内核使用 `DshModelStreamBridge`：它把 Pi 请求上下文转换为 DSH `GenerateOptions`，执行 DSH `agent/request`/`llm.prepareCall`/重试策略，再把 DSH `StreamChunk` 转回 Pi `AssistantMessageEvent`。这层双向转换是有意的：它让 DSH 的设置、凭据、冻结请求、附件、错误分类和重试继续生效。
+The Pi kernel uses `DshModelStreamBridge`: convert Pi request context to DSH `GenerateOptions`, execute DSH `agent/request`/`llm.prepareCall`/retry policy, then convert DSH `StreamChunk` back to Pi `AssistantMessageEvent`. This bidirectional conversion is deliberate: DSH settings, credentials, frozen requests, attachments, error classification, and retries remain effective.
 
-Pi 的 `Model` 对象只是单次 step 的冻结描述，不是配置事实源。模型设置在回复中途改变时只影响下一个 step。
+Pi's `Model` object is a frozen description for one step, not the configuration source of truth. Settings changed mid-response affect only the next step.
 
-V1 不实现公开 OpenAI-compatible 入站网关；桌面 UI/CLI 继续调用 DSH 的 Harness/Agent API。
+V1 implements no public OpenAI-compatible inbound gateway; desktop UI/CLI continue calling DSH Harness/Agent APIs.
 
-## 12. 工具、审批与权限
+## 12. Tools, approval, and permissions
 
-`DshToolBridge` 把当前 Agent scope 中 DSH `tools.schemas(agent)` 的可见工具包装成 Pi `AgentTool`。真正执行必须调用 DSH `tools.execute()`，不得直接调用工具函数。
+`DshToolBridge` wraps visible tools from the current Agent scope's DSH `tools.schemas(agent)` as Pi `AgentTool`. Actual execution must call DSH `tools.execute()`, never tool functions directly.
 
-这样可以保留：
+This preserves:
 
-- 工具可见性和 scope restriction。
-- schema 校验。
-- workspace/path 策略。
-- ask/allow/deny 审批。
-- timeout、取消和安全策略。
-- `tools/result` 观察者。
+- Tool visibility and scope restrictions.
+- Schema validation.
+- Workspace/path policies.
+- Ask/allow/deny approval.
+- Timeout, cancellation, and safety policies.
+- `tools/result` observers.
 - tool presentation metadata。
-- `additionalContexts` 和 `concludesTurn`。
+- `additionalContexts` and `concludesTurn`.
 
-Pi 的 `beforeToolCall`/`afterToolCall` 只用于桥接，不再实现一套权限判断。DSH 返回错误时，桥接器必须让 Pi 看到 `isError=true` 的 ToolResult，同时把 DSH 原始 content、error info 和 meta 无损写入 Session。
+Pi `beforeToolCall`/`afterToolCall` serve bridging only, not another permission system. When DSH returns an error, the bridge must expose an `isError=true` ToolResult to Pi while writing original DSH content, error info, and meta losslessly into Session.
 
-## 13. Goal、Plan、Skills 与 MCP
+## 13. Goal, Plan, Skills, and MCP
 
-这些能力全部复用 DSH：
+All these capabilities reuse DSH:
 
-- `/goal` 继续通过 DSH Goal 服务写 `goal/change`。
-- `/plan` 继续通过 DSH Plan Mode 写 `plan/mode` 并约束工具集。
-- Skills 继续由 DSH filesystem loader 发现，采用渐进式披露进入 System Prompt。
-- MCP 继续由 DSH MCP Client 管理连接并把工具注册到 DSH Tool Registry。
+- `/goal` continues writing `goal/change` through DSH Goal.
+- `/plan` continues writing `plan/mode` through DSH Plan Mode and restricting the tool set.
+- DSH filesystem loader continues discovering Skills, which enter System Prompt through progressive disclosure.
+- DSH MCP Client continues managing MCP connections and registering tools in DSH Tool Registry.
 
-Pi 内核只看见 DSH 组装后的 prompt 和工具快照。因此本地 Skills、MCP tools、Goal/Plan 不需要 Pi 专用适配器，也不会形成第二份状态。
+The Pi kernel sees only DSH-assembled prompts and tool snapshots. Local Skills, MCP tools, and Goal/Plan therefore need no Pi-specific adapter and create no second state.
 
-V1 插件能力限定为加载用户自己的兼容 Skills/MCP 配置。不得承诺可直接分发 OpenAI curated 插件。
+V1 plugin capability is limited to loading users' own compatible Skills/MCP configurations. Never promise direct distribution of OpenAI curated plugins.
 
-图形化 MCP 管理不是第二套 MCP runtime：Host 在 `local-harness.mcp` DSH settings namespace 中保存 GUI-managed server record，并按 record 动态挂载现有 DSH MCP Client。固定 composition MCP 继续只读展示；两类来源共享同一个 `serverName` 唯一性检查、DSH Tool Registry 和权限管线。Client 只拿脱敏配置与运行状态，credential value 仍由 DSH credential store 在 Host 内解析。
+Graphical MCP management is not another MCP runtime: Host stores GUI-managed server records in the `local-harness.mcp` DSH settings namespace and dynamically mounts existing DSH MCP Clients by record. Fixed-composition MCP remains read-only; both sources share one `serverName` uniqueness check, DSH Tool Registry, and permission pipeline. Client receives only redacted configuration/runtime state; DSH credential store still resolves values within Host.
 
-V1 的权限页面只展示并编辑 DSH 实际执行的 workspace、command、network、approval 和 MCP 设置。已安装的 DSH 可执行插件包属于受信任源码；V1 不增加一个只声明但无法由运行时完整执行的便携权限 manifest。跨来源 manifest、细粒度 grant、签名和信任链进入 V1.1。
+V1 permission pages display and edit only workspace, command, network, approval, and MCP settings actually enforced by DSH. Installed executable DSH plugin packages are trusted source; V1 adds no portable permission manifest the runtime cannot fully enforce. Cross-source manifests, fine-grained grants, signing, and trust chains belong to V1.1.
 
-## 14. 前端设计边界
+## 14. Frontend design boundaries
 
-V1 前端沿用 DSH 页面结构、导航、会话列表、工作区、消息卡片、工具卡片、Diff/Terminal、设置和插件清单。
+V1 retains DSH page structure, navigation, session list, workspaces, message/tool cards, Diff/Terminal, settings, and plugin inventory.
 
-需要调整的部分：
+Required adjustments:
 
-1. 产品 chrome 的品牌名、PWA、favicon、侧栏和空会话标志改为 Local-Harness-pi，应用 ID 固定为 `io.localharness.pi`；使用中性 `LHπ` 标志，不复用 DSH 官方 wordmark/鱼形标志。DSH 名称只保留在上游归属、许可、开发者文档和内部兼容标识中。
-2. 设置页增加统一的 Models、Tools & Permissions、Skills、MCP、Experimental 分区。
-3. Composer “+” 菜单提供附件、Skill、MCP/工具、Goal、Plan 入口；其状态与设置页读取同一配置服务。
-4. 工具卡片默认显示摘要、状态和持续时间，参数与原始输出折叠显示。
-5. 流式 assistant 内容使用 transient revision；收到对应 DSH durable seq 后原位收敛，不能生成重复消息。
-6. 会话切换后前端丢弃旧 session 的 transient frame，并从 DSH Session/Query 重新投影。
-7. 设置页提供 GUI-managed MCP 的增删改、启停、冲突处理和单 server 重连；composition MCP 只读。
-8. 保留 DSH 会话重命名、正文搜索、归档/恢复、分叉、导出，以及 Diff/Terminal 展示。
-9. Help/About 显示产品版本、固定上游版本和离线第三方许可。
-10. Web profile 关闭 DSH 默认模型身份句，改由组合层注入 Local-Harness-pi 身份；模型可见的 Web GUI 上下文准确写明产品名，并可注明 built on DeepSeek Harness。
+1. Change product chrome branding, PWA, favicon, sidebar, and empty-session marks to Local-Harness-pi, with fixed app ID `io.localharness.pi`; use a neutral `LHπ` mark, never the official DSH wordmark/fish logo. Keep DSH naming only in attribution, licenses, developer docs, and internal compatibility identifiers.
+2. Add unified Models, Tools & Permissions, Skills, MCP, and Experimental settings sections.
+3. Composer “+” offers attachments, Skill, MCP/tools, Goal, and Plan; its state reads the same configuration service as settings.
+4. Tool cards show summary, status, and duration by default, with arguments/raw output collapsed.
+5. Streaming assistant content uses transient revisions; corresponding DSH durable seq converges in place without duplicate messages.
+6. On session switching, frontend discards old-session transient frames and reprojects from DSH Session/Query.
+7. Settings supports GUI-managed MCP create/edit/remove, enable/disable, conflict handling, and per-server reconnect; composition MCP remains read-only.
+8. Preserve DSH session rename, body search, archive/restore, fork, export, and Diff/Terminal presentation.
+9. Help/About shows product version, pinned upstream versions, and offline third-party licenses.
+10. Web profile disables DSH's default model-identity sentence and injects Local-Harness-pi identity through composition; model-visible Web GUI context names the product accurately and may state it is built on DeepSeek Harness.
 
-V1 不做全面视觉重构。Codex 用于入口和交互细节参考，DSH 保持视觉和布局基础。
+V1 does no comprehensive visual redesign. Codex informs entry points and interaction details; DSH remains the visual/layout foundation.
 
-## 15. 会话一致性
+## 15. Session consistency
 
-会话系统只有一个事实源：DSH append-only Session log。SQLite、Pi 内存和前端状态都是派生层。
+The session system has one source of truth: the DSH append-only Session log. SQLite, Pi memory, and frontend state are derived layers.
 
-必须满足：
+Required invariants:
 
-- Agent id 与 Session id 完全相同。
-- 每个 Session 同时最多一个 write owner。
-- durable seq 单调递增且不复用。
-- assistant/tool 的持久事件在对外宣告完成前已提交到 DSH Session，并在规定的 durability barrier 上完成 `flush()`。
-- crash 后只恢复完整提交前缀；损坏完整 frame 必须拒绝，不能静默截断。
-- `tool/call` 已提交而 `tool/result` 缺失时写 `TOOL_OUTCOME_UNKNOWN` 修复结果；不得自动重放副作用工具。
-- SQLite FTS 可以清空重建；任何索引内容都不能回写覆盖 Session。
-- 前端不得拥有独立的 durable chat 数据库。
-- DSH Compaction 是唯一长会话压缩所有者；自动压力、context overflow 和 `/compact` 都只发布 DSH surface generation，Pi 不保存压缩副本。
+- Agent id exactly equals Session id.
+- At most one simultaneous write owner per Session.
+- Durable seq increases monotonically and is never reused.
+- Assistant/tool durable events commit to DSH Session before external completion, with `flush()` completed at prescribed durability barriers.
+- Crash recovery reads only a fully committed prefix; reject corrupt complete frames, never silently truncate them.
+- A committed `tool/call` without `tool/result` receives a `TOOL_OUTCOME_UNKNOWN` repair result; never automatically replay side-effecting tools.
+- SQLite FTS may be cleared and rebuilt; index content must never overwrite Session.
+- Frontend must not own an independent durable chat database.
+- DSH Compaction exclusively owns long-session compaction; automatic pressure, context overflow, and `/compact` publish only DSH surface generations, with no Pi compaction copy.
 
-详细规则见《会话一致性与恢复》。
+See “Session Consistency and Recovery” for detailed rules.
 
-## 16. 安全基线
+## 16. Security baseline
 
-V1 必须保持或加强以下 Electron 配置：
+V1 must preserve or strengthen these Electron settings:
 
 - `nodeIntegration: false`
 - `contextIsolation: true`
 - `sandbox: true`
 - `webSecurity: true`
-- renderer 只通过最小 preload API 访问 Host。
-- IPC 必须校验 sender、参数 schema、workspace/session 身份。
-- 拦截非允许的 navigation、window open 和自定义协议。
-- 本地模型默认只允许 loopback；云端 route 默认要求 HTTPS。
-- 自定义 HTTP header 中禁止存放明文 API key；凭据使用 DSH credential reference。
-- 文件工具路径在解析符号链接后仍必须位于授权 workspace。
-- 网络工具默认关闭或受 allowlist/审批控制。
-- 日志、Session 和错误信息不得写入密钥。
+- Renderer accesses Host only through a minimal preload API.
+- IPC validates sender, argument schema, and workspace/session identity.
+- Block unapproved navigation, window opening, and custom protocols.
+- Local models allow only loopback by default; cloud routes require HTTPS by default.
+- Custom HTTP headers must not store plaintext API keys; credentials use DSH credential references.
+- File-tool paths must remain inside authorized workspaces after resolving symlinks.
+- Network tools default disabled or are controlled by allowlists/approval.
+- Logs, Session, and errors must not contain secrets.
 
-完整浏览器自动化、插件签名链和全面渗透加固进入 V1.1。
+Full browser automation, plugin-signing chains, and comprehensive penetration hardening belong to V1.1.
 
-## 17. V1 与 V1.1 边界
+## 17. V1 and V1.1 boundary
 
 ### V1
 
-- DSH Electron/UI 产品平台。
-- Pi Agent Core 执行循环。
-- DSH 单一 Session 事实源及恢复。
-- OpenAI-compatible 本地/云端模型。
+- DSH Electron/UI product platform.
+- Pi Agent Core execution loop.
+- DSH single Session source of truth and recovery.
+- OpenAI-compatible local/cloud models.
 - DSH Tools/Approvals/Workspace。
 - Goal、Plan、Skills、MCP。
-- MCP 图形化增删改、启停、失败隔离和重连。
-- 附件和 PDF 预览。
-- `web_search`、`web_fetch` 和外部浏览器打开。
-- GitHub Release 检查与手动下载提示；Alpha 默认关闭自动安装。
-- 基线安全、恢复、E2E 和打包验证。
+- Graphical MCP create/edit/remove, enable/disable, failure isolation, and reconnect.
+- Attachments and PDF previews.
+- `web_search`, `web_fetch`, and external browser opening.
+- GitHub Release checks and manual-download prompts; Alpha disables automatic installation by default.
+- Baseline security, recovery, E2E, and packaging verification.
 
 ### V1.1
 
-- Word/Excel/PDF 创建与编辑插件。
-- 完整 Playwright/Computer-use 浏览器自动化。
-- 签名、自动下载、自动安装和回滚更新。
-- 更细粒度插件权限、网络隔离、审计和安全加固。
-- OpenAI-compatible 入站 Harness Gateway 仍不属于 V1.1；只有未来经单独批准的版本才可加入。
+- Word/Excel/PDF creation and editing plugins.
+- Full Playwright/Computer-use browser automation.
+- Signing, automatic downloads/installations, and rollback updates.
+- Finer-grained plugin permissions, network isolation, auditing, and security hardening.
+- An OpenAI-compatible inbound Harness Gateway remains outside V1.1; only a separately approved future version may add it.
 
-## 18. 失败处理
+## 18. Failure handling
 
-失败必须分层并可诊断：
+Failures must be layered and diagnosable:
 
-- `MODEL_*`：鉴权、限流、超时、上下文溢出、无效请求、传输中断。
-- `TOOL_*`：未知工具、审批拒绝、执行失败、超时、结果未知。
-- `SESSION_*`：写入、锁冲突、损坏、迁移拒绝、恢复失败。
-- `KERNEL_*`：Pi 事件非法、桥接状态机失配、未正常终止。
-- `PROTOCOL_*`：Host/Client 版本或 envelope 校验失败。
+- `MODEL_*`: authentication, rate limits, timeout, context overflow, invalid requests, transport interruption.
+- `TOOL_*`: unknown tools, approval denial, execution failure, timeout, unknown outcomes.
+- `SESSION_*`: writes, lock conflicts, corruption, migration rejection, recovery failure.
+- `KERNEL_*`: invalid Pi events, bridge-state-machine mismatch, abnormal termination.
+- `PROTOCOL_*`: Host/Client version or envelope validation failure.
 
-模型或工具业务失败应形成 DSH 结构化 Session 结果；Session 持久化失败和桥接不变量失败必须停止当前运行，禁止假装完成。
+Model/tool business failures should produce structured DSH Session results; persistence and bridge-invariant failures must stop the current run, never pretend completion.
 
-## 19. 可观测性与隐私
+## 19. Observability and privacy
 
-V1 日志记录：sessionId 的安全短标识、runId、turn/step、provider route、model id、event type、duration、error code。默认不记录用户消息正文、工具输出、文件内容、API key 或 Authorization header。
+V1 logs a safe short sessionId, runId, turn/step, provider route, model id, event type, duration, and error code. By default, omit user-message bodies, tool output, file contents, API keys, and Authorization headers.
 
-运行指标只做本地诊断，不默认上传遥测。任何未来云遥测必须单独取得明确授权。
+Runtime metrics serve local diagnostics only; no default telemetry upload. Any future cloud telemetry requires separate explicit authorization.
 
-## 20. 测试策略
+## 20. Testing strategy
 
-验收必须覆盖四层：
+Acceptance covers four layers:
 
-1. Unit：消息、stream、tool result、错误和事件映射。
-2. Contract：同一用例分别跑 DSH 默认 loop 测试夹具与 Pi loop，验证 DSH 公共不变量。
-3. Integration：本地 mock OpenAI server、DSH model/tool/session 服务、Pi kernel 完整链路。
-4. Desktop E2E：首次模型配置、创建、流式响应、审批、工具、取消、恢复、会话整理/搜索/分叉/导出、长会话压缩、Goal/Plan、Skill/MCP 管理、Diff/Terminal、PDF 预览、About/许可和打包。
+1. Unit: message, stream, tool-result, error, and event mappings.
+2. Contract: run the same cases against DSH default-loop fixtures and Pi loop, verifying public DSH invariants.
+3. Integration: complete local mock OpenAI server, DSH model/tool/session services, and Pi kernel path.
+4. Desktop E2E: first model configuration, creation, streaming responses, approval, tools, cancel, recovery, session organization/search/fork/export, long-session compaction, Goal/Plan, Skill/MCP management, Diff/Terminal, PDF previews, About/licenses, and packaging.
 
-恢复测试必须真实终止子进程模拟：provider 流中断、tool start 后退出、append 尾部撕裂、SQLite 缺失/损坏、同 session 双进程竞争。
+Recovery tests must actually terminate child processes to simulate provider stream interruption, exit after tool start, torn append tails, missing/corrupt SQLite, and two processes competing for the same session.
 
-任何“测试通过”声明必须附实际命令和结果；不得用静态审查代替运行。
+Every “tests pass” claim requires actual commands and results; static review cannot substitute for execution.
 
-## 21. 云端可观察 PR 边界
+## 21. Remotely observable PR boundaries
 
-为便于项目所有者随时查看，V1 建议拆成三个独立可审查成果：
+To let the project owner inspect progress at any time, split V1 into three independently reviewable deliverables:
 
-1. **PR-A：DSH 基线与产品边界**
+1. **PR-A: DSH baseline and product boundaries**
 
-   固定源码、许可证、品牌、组合、会话/安全基线和回归测试；不接 Pi。
+   Pinned source, licenses, branding, composition, session/security baseline, and regression tests; no Pi integration.
 
-2. **PR-B：Pi 内核桥接**
+2. **PR-B: Pi kernel bridge**
 
-   AgentFactory、KernelDriver、模型/工具/事件桥、单一 Session 写入、恢复与兼容测试。
+   AgentFactory, KernelDriver, model/tool/event bridges, single Session writes, recovery, and compatibility tests.
 
-3. **PR-C：V1 产品闭环**
+3. **PR-C: Complete V1 product workflow**
 
-   设置与“+”菜单、Goal/Plan/Skills、图形化 MCP、会话产品闭环、PDF 预览、手动更新提示、桌面 E2E、打包和发布说明。
+   Settings and “+” menu, Goal/Plan/Skills, graphical MCP, complete session workflow, PDF preview, manual-update prompts, desktop E2E, packaging, and release notes.
 
-如 PR-B diff 过大，只允许按“运行/模型桥”和“工具/持久化桥”拆成 B1/B2，最多形成四个 PR。不能按技术层制造更多长期分支。
+If PR-B becomes too large, split only into B1/B2 for “run/model bridge” and “tool/persistence bridge”, yielding at most four PRs. Never create more long-lived branches by technical layer.
 
-## 22. 工期预算
+## 22. Effort budget
 
-在直接复用 DSH、由一个主实现 Codex 串行推进、另一个 Codex 独立复审的前提下：
+Assuming direct DSH reuse, one primary Codex implementing sequentially, and another Codex reviewing independently:
 
-- V1 乐观：22 个工作日，按 5 个日历周安排。
-- V1 常规：25 个工作日，约 5 个日历周。
-- V1 保守：29 个工作日，约 6 个日历周。
-- 以 GPT-5.6 Sol Plus 的完整周额度衡量：约 3.2–4.7 个周额度；额度等待可能延长日历时间，但不改变净工作日。
-- V1.1 不属于本实施计划的承诺工期。按当前四类范围（Office/PDF 编辑、完整浏览器自动化、签名更新、细粒度安全）只做容量级粗估：额外 4–8 个日历周、约 3–6 个完整周额度；必须在 V1 稳定后另写需求、接口和分 PR 计划再承诺日期，证书采购/签发等待另计。
+- Optimistic V1: 22 working days, scheduled over 5 calendar weeks.
+- Typical V1: 25 working days, approximately 5 calendar weeks.
+- Conservative V1: 29 working days, approximately 6 calendar weeks.
+- In full GPT-5.6 Sol Plus weekly quotas: approximately 3.2–4.7; quota waiting may extend calendar time without changing net working days.
+- V1.1 is outside this plan's committed schedule. For the current four scope categories (Office/PDF editing, full browser automation, signed updates, fine-grained security), a capacity-level estimate only is 4–8 additional calendar weeks and approximately 3–6 full weekly quotas; after V1 stabilizes, write separate requirements, interfaces, and per-PR plans before committing dates, with certificate purchase/issuance waits accounted for separately.
 
-V1 估算包含源码复核、实现、测试、MCP 图形化管理、产品闭环回归、20% 左右集成修复余量和复审；不包含等待人工决定、真实模型服务不可用、签名证书申请或上游大版本升级。不得通过取消 Session/Pi/MCP P0 测试压缩工期，只能减少视觉微调或延期已获批准的 P1。
+The V1 estimate includes source review, implementation, tests, graphical MCP management, product-workflow regression, approximately 20% integration-fix margin, and rereview; it excludes waiting for human decisions, unavailable real model services, certificate requests, and upstream major upgrades. Never shorten it by dropping Session/Pi/MCP P0 tests; reduce visual polish or defer approved P1 work only.
 
-## 23. 变更控制
+## 23. Change control
 
-以下变化属于架构变更，必须先更新本文档并取得项目所有者确认：
+These are architectural changes requiring this document to be updated and confirmed by the project owner first:
 
-- 增加第二个持久化 Session store。
-- 改用 Pi AgentHarness。
-- 绕过 DSH Tools/LLM/Approval 服务。
-- 让前端直接消费 Pi 原生事件。
-- 在 V1 增加 Qwen Code 内核、公开 OpenAI 网关、Office 编辑或完整浏览器自动化。
-- 改用 Tauri 或重写 DSH UI。
+- Adding a second persistent Session store.
+- Switching to Pi AgentHarness.
+- Bypassing DSH Tools/LLM/Approval services.
+- Letting the frontend consume raw Pi events directly.
+- Adding Qwen Code kernel, a public OpenAI gateway, Office editing, or full browser automation to V1.
+- Switching to Tauri or rewriting DSH UI.
 
-类名、文件名和纯内部拆分可以在不改变契约的前提下调整，但 PR 必须说明对应关系。
+Class names, filenames, and purely internal decomposition may change without altering contracts, but PRs must explain the correspondence.
 
-## 24. 文档间优先级
+## 24. Document precedence
 
-发生冲突时按以下优先级处理：
+Resolve conflicts in this order:
 
-1. 本总体架构设计中的所有权、范围和禁止项。
-2. 《会话一致性与恢复》中的数据不变量。
-3. 《接口契约》中的类型和时序。
-4. 《V1 需求规格》中的产品行为和验收条件。
+1. Ownership, scope, and prohibitions in this overall architecture design.
+2. Data invariants in “Session Consistency and Recovery”.
+3. Types and ordering in “Interface Contracts”.
+4. Product behavior and acceptance criteria in “V1 Requirements Specification”.
 
-任何无法按此顺序消解的冲突必须先修正文档，不得由代码执行者自行改变方向。
+Any conflict unresolved by this order requires documentation correction first; implementers must not redirect the project themselves.

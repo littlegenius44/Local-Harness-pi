@@ -2,6 +2,8 @@
 
 [English](2026-09-18-agent-machine-seam-rectification.md) | 中文
 
+标为 `ts design` 的代码是待实施设计片段，只验证语法，不代表当前可调用的 API；省略的宿主依赖在对应实施任务中接线，并须通过源码类型检查和契约测试。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在不复制 DSH `AgentFactory` 生命周期的前提下接入 Pi conversational tool-loop，并把消息边界、唯一事实源和 PR-B 前置门禁收紧到可直接实现的程度。
@@ -54,7 +56,7 @@
 
 - [ ] 在 `index.ts` 增加最小 public seam。标识名可因上游现有导出冲突微调，但形状必须等价：
 
-  ```ts
+  ```ts design
   import type { Scope } from '@deepseek-ai/dsh-scope'
 
   export interface AgentLoopMachine extends Agent {
@@ -77,7 +79,7 @@
 
   将 `PreparedAgent.agent` 和内部 `machine` 类型改为 `AgentLoopMachine`，唯一直接构造点改为：
 
-  ```ts
+  ```ts design
   machine = this.createMachine({ ctx: loopCtx, id, options, session })
   ```
 
@@ -112,7 +114,7 @@
 
 - [ ] `KernelContextSnapshot.messages` 与 `KernelRunInput.initialMessages` 使用 `readonly Message[]`；message started/completed 使用 DSH `Message`（可证明为 assistant-only 时收窄为 `AssistantMessage`）；delta 使用 DSH `StreamChunk`；工具结果 content 使用 `readonly ContentBlock[]`。
 
-  ```ts
+  ```ts design
   import type { ContentBlock, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
 
   export interface KernelContextSnapshot {
@@ -152,7 +154,7 @@
 
 - [ ] `@local-harness/pi-agent-loop` 对 `@deepseek-ai/dsh-agent-loop` 建立 workspace production dependency。它继承 lifecycle，不复制其源码：
 
-  ```ts
+  ```ts design
   import { AgentLoop, type AgentLoopMachine, type AgentMachineCreateInput } from '@deepseek-ai/dsh-agent-loop'
 
   export class PiAgentLoop extends AgentLoop {

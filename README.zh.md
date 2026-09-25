@@ -20,23 +20,23 @@
 <a id="run-from-source"></a>
 ## 从源码验证
 
-本次构建使用 Node.js 24.17.0 和仓库固定的 pnpm 11.7.0。安装依赖后，`pnpm run build:official` 构建前后端，`pnpm run build:desktop` 编译桌面程序。Windows 开发版打包入口为 `pnpm run package:desktop:win:x64:dir`；打包和启动验收尚未完成。
+本次构建使用 Node.js 24.17.0 和仓库固定的 pnpm 11.7.0。安装依赖后，`pnpm run build:official` 构建前后端，`pnpm run build:desktop` 编译桌面程序。Windows 开发版打包入口为 `pnpm run package:desktop:win:x64:dir`；已在本地独立目录完成基线安装包的首次启动、重启与卸载测试。命令、打包限制和冷启动耗时见[验收记录](.agents/notes/proposed/architecture/2026-09-12-local-harness-pi-baseline-and-isolation.zh.md)。
 
 ## 文档入口
 
-- [总体架构设计](docs/superpowers/specs/2026-09-09-local-harness-pi-v1-design.md)
-- [V1 需求规格](docs/requirements/v1-requirements.md)
-- [接口契约](docs/architecture/interface-contracts.md)
-- [会话一致性与恢复](docs/architecture/session-consistency.md)
+- [总体架构设计](docs/superpowers/specs/2026-09-09-local-harness-pi-v1-design.zh.md)
+- [V1 需求规格](docs/requirements/v1-requirements.zh.md)
+- [接口契约](docs/architecture/interface-contracts.zh.md)
+- [会话一致性与恢复](docs/architecture/session-consistency.zh.md)
 
 ## 实施计划
 
-- [Agent machine 构造入口与 PR-A/PR-B 整改](docs/superpowers/plans/2026-09-18-agent-machine-seam-rectification.md)
+- [Agent machine 构造入口与 PR-A/PR-B 整改](docs/superpowers/plans/2026-09-18-agent-machine-seam-rectification.zh.md)
 
-- [V1 主计划与三个 Draft PR 检查点](docs/superpowers/plans/2026-09-10-local-harness-pi-v1-master.md)
-- [PR-A：DSH 源码基线、桌面品牌与安全边界](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-a-dsh-baseline.md)
-- [PR-B：Pi Agent Core 内核桥与单一对话/执行恢复事实源](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-b-pi-kernel.md)
-- [PR-C：OpenAI-compatible 配置与 V1 桌面产品闭环](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-c-product-loop.md)
+- [V1 主计划与三个 Draft PR 检查点](docs/superpowers/plans/2026-09-10-local-harness-pi-v1-master.zh.md)
+- [PR-A：DSH 源码基线、桌面品牌与安全边界](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-a-dsh-baseline.zh.md)
+- [PR-B：Pi Agent Core 内核桥与单一对话/执行恢复事实源](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-b-pi-kernel.zh.md)
+- [PR-C：OpenAI-compatible 配置与 V1 桌面产品闭环](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-c-product-loop.zh.md)
 
 ## 当前状态
 
@@ -44,7 +44,7 @@
 - V1/V1.1 范围：已确认
 - 需求与接口文档：已确认
 - 实施计划：已完成
-- PR-A：源码已导入，完整构建通过，文档与打包验收进行中
+- PR-A：源码已导入，基线构建、测试、文档和独立安装器测试通过；Draft PR 交接进行中
 - PR-B / PR-C：尚未开始
 
 ## 上游来源基线

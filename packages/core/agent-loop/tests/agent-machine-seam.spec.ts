@@ -108,7 +108,9 @@ describe('AgentLoop machine construction', () => {
     const { ctx, inputs } = await harness(false, false, {
       agents: [{ id: 'configured', sessionId: id }],
     })
-    await vi.waitFor(() => expect(ctx.agents.get(id)).toBeInstanceOf(InjectedMachine))
+    await vi.waitFor(() => {
+      expect(ctx.agents.get(id)).toBeInstanceOf(InjectedMachine)
+    })
     expect(inputs).toHaveLength(1)
     expect(inputs[0]?.id).toBe(id)
   })

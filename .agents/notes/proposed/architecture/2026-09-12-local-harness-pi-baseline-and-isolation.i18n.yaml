@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/proposed/architecture/2026-09-12-local-harness-pi-baseline-and-isolation.md
-2026-09-12-local-harness-pi-baseline-and-isolation.md: 177cd9ebe62ec8f8468d5ba75da6d06922b8c02f
-2026-09-12-local-harness-pi-baseline-and-isolation.zh.md: 8893df4c8cfbc929a489f4d5bdad6e604d5bbbc3
+2026-09-12-local-harness-pi-baseline-and-isolation.md: e6e726260b88e247dd83296e86b311ea026b4f4b
+2026-09-12-local-harness-pi-baseline-and-isolation.zh.md: b97586b250410ad476c7fa033cb0908d98a952c8

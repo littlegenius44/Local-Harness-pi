@@ -2,6 +2,8 @@
 
 [English](interface-contracts.md) | 中文
 
+标为 `ts design` 的代码是待实施设计片段，只验证语法，不代表当前可调用的 API；省略的宿主依赖在对应实施任务中接线，并须通过源码类型检查和契约测试。
+
 文档版本：1.2
 
 契约版本：`1`
@@ -43,7 +45,7 @@ DshPiAgent
 
 以下定义表达语义；项目中应优先复用 DSH branded types：
 
-```ts
+```ts design
 export type ProtocolVersion = 1
 
 export type SessionId = string & { readonly __brand: 'SessionId' }
@@ -79,11 +81,11 @@ export interface StableFailure {
 
 `KernelDriver` 是未来更换对话式工具循环内核的最小 seam。它不定义 Session、模型设置、Tool Registry、UI、通用 agent graph、多 Agent 编排或任意后台 workflow。Kernel public face 直接复用 DSH canonical message types，不创建 Local Harness 消息 IR：
 
-```ts
+```ts design
 import type { ContentBlock, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
 ```
 
-```ts
+```ts design
 export type KernelId = 'pi'
 
 export interface KernelDescriptor {
@@ -172,7 +174,7 @@ V1 `PiKernelDriver.descriptor.id` 固定为 `pi`。配置文件不提供不存�
 
 内核事件使用产品侧术语，Pi 原始事件只存在于 `PiKernelDriver` 内部：
 
-```ts
+```ts design
 export type KernelEvent =
   | { readonly type: 'run.started'; readonly runId: RunId }
   | { readonly type: 'step.started'; readonly position: TurnPosition }
@@ -260,7 +262,7 @@ Pi `Agent.subscribe()` 必须使用 async listener，不能使用低层只观察
 
 DSH `AgentLoop` 继续是唯一 `AgentFactory` 生命周期实现。PR-A 在固定基线中加入以下行为中性 seam；默认实现仍创建 `ReactLoopAgent`：
 
-```ts
+```ts design
 import type { Scope } from '@deepseek-ai/dsh-scope'
 
 export interface AgentLoopMachine extends Agent {
@@ -283,7 +285,7 @@ export class AgentLoop extends Service implements AgentFactory {
 
 Pi 包只继承并覆盖这个构造点：
 
-```ts
+```ts design
 export class PiAgentLoop extends AgentLoop {
   protected override createMachine(input: AgentMachineCreateInput): AgentLoopMachine {
     return new DshPiAgent(input.ctx, input.id, input.options, input.session)
@@ -315,7 +317,7 @@ export class PiAgentLoop extends AgentLoop {
 
 ## 8. DshPiAgent 契约
 
-```ts
+```ts design
 export class DshPiAgent implements DshAgent {
   readonly id: SessionId
   readonly session: Session
@@ -349,7 +351,7 @@ export class DshPiAgent implements DshAgent {
 
 每个 Pi turn 前必须形成不可变的 `PreparedKernelStep`：
 
-```ts
+```ts design
 export interface PreparedKernelStep {
   readonly position: TurnPosition
   readonly admittedMessages: readonly UserMessage[]
@@ -390,7 +392,7 @@ export interface StepPreparer {
 
 只有这个端口把内核运行事实写入 DSH Session：
 
-```ts
+```ts design
 export interface SessionCommitPort {
   startTurn(turn: number): SessionSeq
   startStep(position: TurnPosition): SessionSeq
@@ -442,7 +444,7 @@ export interface SessionDurabilityPort {
 
 配置继续进入 DSH `llm-pi-ai` settings。V1 规范化结构为：
 
-```ts
+```ts design
 export interface OpenAiCompatibleRoute {
   readonly id: string
   readonly displayName: string
@@ -487,7 +489,7 @@ export interface OpenAiCompatibleModel {
 
 模型 route 与 `streamable-http` MCP 只能使用 `@local-harness/guarded-fetch`，不得各自实现重定向、DNS 或 proxy 规则。该包是 Host-only 机制包，不依赖 Pi、MCP SDK、DSH Session 或 Client：
 
-```ts
+```ts design
 export interface GuardedFetchPolicy {
   readonly destination: 'loopback' | 'https'
   readonly credentialBound: boolean
@@ -515,7 +517,7 @@ Pi adapter 在调用 `snapshot.models.streamSimple()` 时把 handle 的 `fetch` 
 
 ## 12. DshModelStreamBridge
 
-```ts
+```ts design
 export interface DshModelStreamBridge {
   resolve(
     agent: DshAgent,
@@ -567,7 +569,7 @@ DSH Message 是产品侧 canonical format。转换必须满足：
 
 ## 14. DshToolBridge
 
-```ts
+```ts design
 export interface DshToolCall {
   readonly callId: ToolCallId
   readonly name: string
@@ -601,7 +603,7 @@ export interface DshToolBridge {
 
 `execute()` 必须调用：
 
-```ts
+```ts design
 ctx.tools.execute({
   callId,
   name,
@@ -628,7 +630,7 @@ Pi `AgentTool.execute()` 与 `afterToolCall` 的桥接规则：
 
 ## 15. 并行工具与提交重排
 
-```ts
+```ts design
 export interface ToolCommitBuffer {
   register(call: DshToolCall, callSeq: SessionSeq): void
   settleExecution(result: DshToolBridgeResult): void
@@ -655,7 +657,7 @@ export interface ToolCommitBuffer {
 
 审批不进入 KernelDriver。DSH Tools pipeline 是唯一审批所有者：
 
-```ts
+```ts design
 export type ApprovalDecision =
   | { readonly kind: 'allowed-once' }
   | { readonly kind: 'denied'; readonly reason?: string }
@@ -663,7 +665,7 @@ export type ApprovalDecision =
 
 审批请求的 UI identity 至少包含：
 
-```ts
+```ts design
 export interface ApprovalRequestView {
   readonly sessionId: SessionId
   readonly callId: ToolCallId
@@ -680,7 +682,7 @@ export interface ApprovalRequestView {
 
 这些命令映射到 DSH 现有 Host API，不要求创建新网络端点：
 
-```ts
+```ts design
 export type HarnessCommand =
   | { readonly type: 'workspace.open'; readonly path: string }
   | { readonly type: 'session.create'; readonly workspaceId: WorkspaceId }
@@ -714,7 +716,7 @@ export type HarnessCommand =
 
 命令 envelope：
 
-```ts
+```ts design
 export interface CommandEnvelope<C extends HarnessCommand = HarnessCommand> {
   readonly protocolVersion: 1
   readonly commandId: string
@@ -739,7 +741,7 @@ export type CommandResult<T = unknown> =
 
 Host 向 UI 发两类事件：
 
-```ts
+```ts design
 export type HarnessEventEnvelope = DurableEnvelope | RuntimeEnvelope
 
 export interface DurableEnvelope {
@@ -780,7 +782,7 @@ Client 规则：
 
 重新连接或切换会话使用 snapshot + cursor：
 
-```ts
+```ts design
 export interface SessionViewSnapshot {
   readonly sessionId: SessionId
   readonly generation: number
@@ -808,7 +810,7 @@ KernelDriver 只接收组装后的 `KernelContextSnapshot`。若 Pi package 中�
 
 GUI-managed MCP 只增加 DSH Host 配置控制面，不增加第二个 MCP Client。配置存在 DSH settings namespace `local-harness.mcp`，每个启用记录由 Host 在 DSH Tool Registry 的 deployment-global/root layer 动态挂载一个 `@deepseek-ai/dsh-mcp-client` fiber；所有 Agent scope 按 DSH 继承规则看见它，不能为每个 session 复制连接或配置。固定 composition 中同包实例继续由 Loader 管理且只读。
 
-```ts
+```ts design
 export type McpManagedServerId = string & { readonly __brand: 'McpManagedServerId' }
 
 export interface McpCredentialBinding {
@@ -892,7 +894,7 @@ stdio `command` 是非空 executable/path，拒绝 NUL、CR/LF 和把 command+ar
 
 Host 新增 `mcpConfiguration` Typert namespace，业务方法固定为：
 
-```ts
+```ts design
 export interface McpMutationResult {
   readonly targetId: McpManagedServerId
   readonly snapshot: McpConfigurationSnapshot

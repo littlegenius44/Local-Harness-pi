@@ -1,24 +1,28 @@
 # PR-B Pi Kernel Bridge Implementation Plan
 
+English | [中文](2026-09-10-local-harness-pi-pr-b-pi-kernel.zh.md)
+
+Fences marked `ts design` are planned implementation excerpts checked for syntax only, not available APIs. Their omitted host dependencies must be wired and pass source typechecking and contract tests in the owning implementation task.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 用 `@earendil-works/pi-agent-core@0.85.1` 驱动 DSH Agent，但继续由 DSH 拥有 Session、LLM、Tools、Approval、Prompt、Goal/Plan、Skill 和 MCP，并通过契约测试证明单一对话/执行恢复事实源与崩溃屏障。
+**Goal:** Drive DSH Agents with `@earendil-works/pi-agent-core@0.85.1` while DSH retains Session, LLM, Tools, Approval, Prompt, Goal/Plan, Skill, and MCP ownership; prove the single source of conversation/execution recovery truth and crash barriers through contract tests.
 
-**Architecture:** 新增私有包 `@local-harness/pi-agent-loop`。其 `PiAgentLoop` 继承 PR-A 的 DSH `AgentLoop`，只覆盖 machine 构造 seam，不复制 AgentFactory 生命周期。包内以 typed `KernelDriver` 隔离 Pi 类型，以 `SessionCommitPort`、`DshModelStreamBridge`、`DshToolBridge` 连接 DSH 服务。一次 Pi run 等于一个 DSH turn；Pi turn 等于 DSH step；DSH next-turn 不进入 Pi follow-up queue。V1 KernelDriver 是 conversational tool-loop seam，不是通用 agent graph。
+**Architecture:** Add the private `@local-harness/pi-agent-loop` package. Its `PiAgentLoop` inherits PR-A's DSH `AgentLoop`, overrides only the machine-construction seam, and never duplicates the AgentFactory lifecycle. A typed `KernelDriver` isolates Pi types; `SessionCommitPort`, `DshModelStreamBridge`, and `DshToolBridge` connect DSH services. One Pi run equals one DSH turn; a Pi turn equals a DSH step; DSH next-turn never enters the Pi follow-up queue. The V1 KernelDriver is a conversational tool-loop seam, not a general agent graph.
 
 **Tech Stack:** TypeScript、Cordis、Vitest、DSH Agent/Session/LLM/Tools APIs、`@earendil-works/pi-agent-core@0.85.1`、`@earendil-works/pi-ai@0.85.1`。
 
 ---
 
-## 上游复读清单
+## Upstream rereading checklist
 
-开工前完整阅读：
+Read completely before starting:
 
-- DSH：`docs/cookbook/adding-a-package.md`；`packages/core/agent/src/index.ts`、`runtime-types.ts`；`packages/core/agent-loop/src/index.ts` 中 PR-A 新增的 `AgentLoopMachine`/`AgentMachineCreateInput`/`createMachine()`、`agent.ts`、`inbox.ts`、`assistant-stream.ts`、`runtime-context.ts`、`tool-calls.ts`、全部 tests；`packages/core/tools/src/index.ts`；`packages/session/session-persistence/src/handle.ts`；JSONL persistence、projection 和 interrupted-turn repair；`packages/llm/llm/src/message.ts`、`types.ts`、`llm-pi-ai/src/adapter.ts`、`context.ts`、`stream.ts`；`packages/api/session-controller/src/commands.ts`；`packages/compaction/compaction-basic/src/index.ts`、`tests/compaction-loop-repro.spec.ts`；`packages/compaction/command-compact/src/index.ts`、`tests/command-compact.spec.ts`。
-- Pi：`packages/agent/src/agent.ts`、`agent-loop.ts`、`types.ts`、对应 tests；`packages/ai/src/utils/event-stream.ts` 和 OpenAI Responses/Completions event implementations。
-- Codex：只复核审批/工具调用和会话完成的安全边界，不复制运行时代码。
+- DSH: `docs/cookbook/adding-a-package.md`; `packages/core/agent/src/index.ts`, `runtime-types.ts`; PR-A's `AgentLoopMachine`/`AgentMachineCreateInput`/`createMachine()` in `packages/core/agent-loop/src/index.ts`, plus `agent.ts`, `inbox.ts`, `assistant-stream.ts`, `runtime-context.ts`, `tool-calls.ts`, and all tests; `packages/core/tools/src/index.ts`; `packages/session/session-persistence/src/handle.ts`; JSONL persistence, projection, and interrupted-turn repair; `packages/llm/llm/src/message.ts`, `types.ts`, `llm-pi-ai/src/adapter.ts`, `context.ts`, `stream.ts`; `packages/api/session-controller/src/commands.ts`; `packages/compaction/compaction-basic/src/index.ts`, `tests/compaction-loop-repro.spec.ts`; `packages/compaction/command-compact/src/index.ts`, `tests/command-compact.spec.ts`.
+- Pi: `agent/src/agent.ts` under Pi's `packages` directory, `agent-loop.ts`, `types.ts`, and corresponding tests; `packages/ai/src/utils/event-stream.ts` and OpenAI Responses/Completions event implementations.
+- Codex: review only the safety boundaries of approval/tool calls and session completion; do not copy runtime code.
 
-## Task B1：创建 Pi loop 私有包并锁死依赖边界
+## Task B1: Create the private Pi loop package and lock dependency boundaries
 
 **Files:**
 
@@ -36,25 +40,25 @@
 - Modify: `tsconfig.base.json`
 - Modify: `tsconfig.host.json`
 
-- [ ] 从已合入的 PR-A 主线创建分支。
+- [ ] Create a branch from main with PR-A merged.
 
   Run: `git switch -c pr-b/pi-kernel`
 
-- [ ] 先写 boundary verifier 的失败测试。测试向临时 source tree 分别放入以下 import，并断言拒绝：
+- [ ] First write failing boundary-verifier tests. Place each of the following imports into a temporary source tree and assert rejection:
 
-  ```ts
+  ```ts design
   import '@earendil-works/pi-agent-core/harness/session'
   import '@earendil-works/pi-agent-core/harness/context'
   import '@earendil-works/pi-agent-core/harness/runtime/reducer'
   ```
 
-  再断言根入口 `@earendil-works/pi-agent-core` 只允许出现在 `packages/core/agent-loop-pi/src/pi-kernel-driver.ts` 和该包测试中；Client、Session schema、Tool、LLM 包不得 import 它。
+  Then assert that the root entry `@earendil-works/pi-agent-core` is allowed only in `packages/core/agent-loop-pi/src/pi-kernel-driver.ts` and that package's tests; Client, Session schema, Tool, and LLM packages must not import it.
 
-- [ ] 运行失败测试。
+- [ ] Run the failing tests.
 
   Run: `pnpm vitest run scripts/tests/verify-pi-kernel-boundary.spec.ts`
 
-- [ ] 创建 package manifest。使用 `packages/core/agent-loop/package.json` 的 DSH peer dependency 集，增加：
+- [ ] Create the package manifest. Use the DSH peer dependency set from `packages/core/agent-loop/package.json`, and add:
 
   ```json
   {
@@ -72,13 +76,13 @@
   }
   ```
 
-  保留 DSH 包中的 `@deepseek-ai/dsh-brand`、`dsh-util-values`、Schemastery、Zod 依赖。对 `@deepseek-ai/dsh-agent-loop` 的生产依赖用于继承唯一 lifecycle 实现，不代表激活第二个 Cordis plugin。不得加入 Pi CLI、coding-agent 或 harness 子路径。
+  Retain the DSH package's dependencies on `@deepseek-ai/dsh-brand`, `dsh-util-values`, Schemastery, and Zod. The production dependency on `@deepseek-ai/dsh-agent-loop` inherits the sole lifecycle implementation; it does not activate a second Cordis plugin. Do not add Pi CLI, coding-agent, or harness subpaths.
 
-- [ ] 按 DSH `docs/cookbook/adding-a-package.md` 注册项目：`tsconfig.base.json` 增加 `@local-harness/pi-agent-loop` 精确 source alias，`tsconfig.host.json` 增加 `packages/core/agent-loop-pi` project reference；禁止加入 Client aggregate。README 按 core Agent Loop 模板记录 Pi 边界、直接模型上下文与已知限制，运行 `pnpm run doc-sync` 并提交配对文件。
+- [ ] Register the project following DSH `docs/cookbook/adding-a-package.md`: add an exact source alias for `@local-harness/pi-agent-loop` in `tsconfig.base.json` and a `packages/core/agent-loop-pi` project reference in `tsconfig.host.json`; never add it to the Client aggregate. Follow the core Agent Loop README template to document Pi boundaries, direct model context, and known limitations; run `pnpm run doc-sync` and commit the paired files.
 
-- [ ] 在 `pnpm-workspace.yaml` 的 `minimumReleaseAgeExclude` 增加精确 `@earendil-works/pi-agent-core@0.85.1`；运行 `pnpm install` 更新 lockfile。
+- [ ] Add exact `@earendil-works/pi-agent-core@0.85.1` to `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`; run `pnpm install` to update the lockfile.
 
-- [ ] root `package.json` 增加：
+- [ ] Add to root `package.json`:
 
   ```json
   {
@@ -89,7 +93,7 @@
   }
   ```
 
-- [ ] 运行测试和精确依赖检查。
+- [ ] Run tests and exact dependency checks.
 
   Run:
 
@@ -99,9 +103,9 @@
   pnpm why @earendil-works/pi-agent-core
   ```
 
-  Expected: verifier 通过；生产根入口只有新包；版本为 `0.85.1`。
+  Expected: the verifier passes; only the new package imports the production root entry; the version is `0.85.1`.
 
-- [ ] 提交。
+- [ ] Commit.
 
   Run:
 
@@ -110,7 +114,7 @@
   git commit -m "build: add the pinned Pi kernel package"
   ```
 
-## Task B2：定义内核无关契约和可复用 conformance suite
+## Task B2: Define kernel-independent contracts and a reusable conformance suite
 
 **Files:**
 
@@ -119,15 +123,15 @@
 - Create: `packages/core/agent-loop-pi/tests/mock-kernel-driver.ts`
 - Create: `packages/core/agent-loop-pi/tests/kernel-driver.spec.ts`
 
-- [ ] 先写 conformance cases：事件严格串行 await、首事件必须 `run.started`、step 平衡、tool start/end 配对、`run.completed` 最后、第二个并发 run 拒绝、abort 幂等且第一次原因获胜。
+- [ ] First write conformance cases: strictly serial awaited events, mandatory first `run.started`, balanced steps, paired tool start/end, final `run.completed`, rejection of a second concurrent run, and idempotent abort with the first reason winning.
 
-- [ ] 运行失败测试。
+- [ ] Run the failing tests.
 
   Run: `pnpm vitest run packages/core/agent-loop-pi/tests/kernel-driver.spec.ts`
 
-- [ ] 实现 `kernel-driver.ts`，逐字遵循 `docs/architecture/interface-contracts.md` 第 4–5 节。核心 public face 固定为：
+- [ ] Implement `kernel-driver.ts` exactly as sections 4–5 of `docs/architecture/interface-contracts.md` specify. Fix the core public face as:
 
-  ```ts
+  ```ts design
   export type KernelId = 'pi'
 
   export interface KernelEventSink {
@@ -146,24 +150,24 @@
   }
   ```
 
-  `KernelEvent` 使用 `run.started`、`step.started`、`message.started/delta/completed`、`tool.started/progress/completed`、`step.completed`、`run.completed`；此文件不得 import Pi 类型。它必须从 `@deepseek-ai/dsh-llm` 复用 `Message`、`ContentBlock` 和 `StreamChunk`：context/initial messages 为 `readonly Message[]`，message event 为 `Message`，delta 为 `StreamChunk`，tool result content 为 `readonly ContentBlock[]`。工具 arguments、abort reason 和脱敏 metadata 在其校验边界仍可为 `unknown`；禁止创建第三套 Local Harness message IR。
+  `KernelEvent` uses `run.started`, `step.started`, `message.started/delta/completed`, `tool.started/progress/completed`, `step.completed`, and `run.completed`; this file must not import Pi types. It must reuse `Message`, `ContentBlock`, and `StreamChunk` from `@deepseek-ai/dsh-llm`: context/initial messages are `readonly Message[]`, message events use `Message`, deltas use `StreamChunk`, and tool result content uses `readonly ContentBlock[]`. Tool arguments, abort reasons, and redacted metadata may remain `unknown` at their validation boundaries; do not create a third Local Harness message IR.
 
-- [ ] Mock driver 复用同一个 ordered dispatch：
+- [ ] The mock driver reuses the same ordered dispatch:
 
-  ```ts
+  ```ts design
   for (const event of events) {
     if (signal.aborted) break
     await sink.onEvent(event, signal)
   }
   ```
 
-  `settled` 必须在最后一次 `onEvent` resolve 后完成。
+  `settled` must complete after the final `onEvent` resolves.
 
-- [ ] 运行测试。
+- [ ] Run tests.
 
   Run: `pnpm vitest run packages/core/agent-loop-pi/tests/kernel-driver.spec.ts`
 
-- [ ] 提交。
+- [ ] Commit.
 
   Run:
 
@@ -172,7 +176,7 @@
   git commit -m "feat: define the kernel driver contract"
   ```
 
-## Task B3：实现 DSH/Pi 消息转换与每 step 上下文重建
+## Task B3: Implement DSH/Pi message conversion and context rebuilding at every step
 
 **Files:**
 
@@ -181,27 +185,27 @@
 - Test: `packages/core/agent-loop-pi/tests/message-conversion.spec.ts`
 - Test: `packages/core/agent-loop-pi/tests/step-preparer.spec.ts`
 
-- [ ] 先写 round-trip fixtures：Unicode、空文本、reasoning、多图片引用、嵌套 tool arguments、并行 tool calls、error tool result。断言 block 顺序、messageId、callId、provider/model/usage 不丢失。
+- [ ] First write round-trip fixtures: Unicode, empty text, reasoning, multiple image references, nested tool arguments, parallel tool calls, and error tool results. Assert preservation of block order, messageId, callId, and provider/model/usage.
 
-- [ ] 先写 step preparation 测试：每次都从 DSH Session surface 重新投影；DSH `agent/pre-step` reject 时没有 `step/start` 和模型调用；设置变化只影响下一 step。再构造 generation 1 原始 surface 与 generation 2 compaction surface，断言第二次 `prepare()` 的 Pi messages 只来自 generation 2，既不引用第一次返回数组，也不包含被 shadow 的原始节点。
+- [ ] First write step-preparation tests: reproject from the DSH Session surface every time; rejection by DSH `agent/pre-step` produces neither `step/start` nor a model call; settings changes affect only the next step. Then construct the original generation 1 surface and generation 2 compaction surface; assert that Pi messages from the second `prepare()` come exclusively from generation 2, neither reference the first returned array nor contain shadowed original nodes.
 
-- [ ] 运行失败测试。
+- [ ] Run the failing tests.
 
   Run: `pnpm vitest run packages/core/agent-loop-pi/tests/message-conversion.spec.ts packages/core/agent-loop-pi/tests/step-preparer.spec.ts`
 
-- [ ] 实现显式转换函数，不用 JSON stringify 整条 message 偷换类型：
+- [ ] Implement explicit conversion functions; do not use JSON stringify on an entire message to disguise a type conversion:
 
-  ```ts
+  ```ts design
   export function toPiMessages(messages: readonly DshMessage[]): AgentMessage[]
   export function fromPiMessage(message: AgentMessage): DshMessage
   export function toolArguments(raw: string): unknown
   ```
 
-  `toolArguments` 解析失败返回 `KERNEL_MESSAGE_CONVERSION`；不得丢弃坏 block 后继续。
+  Failure to parse `toolArguments` returns `KERNEL_MESSAGE_CONVERSION`; never discard a malformed block and continue.
 
-- [ ] 实现 `StepPreparer.prepare()` 固定顺序：claim DSH Inbox -> assemble System Prompt/tools -> `agent/pre-step` -> freeze model/tool/context -> 返回 `PreparedKernelStep`。对 context、tools、model 和 message arrays 做防御性复制及深冻结。
+- [ ] Implement `StepPreparer.prepare()` in this fixed order: claim DSH Inbox -> assemble System Prompt/tools -> `agent/pre-step` -> freeze model/tool/context -> return `PreparedKernelStep`. Defensively copy and deeply freeze context, tools, model, and message arrays.
 
-- [ ] 运行测试并提交。
+- [ ] Run tests and commit.
 
   Run:
 
@@ -211,7 +215,7 @@
   git commit -m "feat: rebuild Pi context from DSH session state"
   ```
 
-## Task B4：实现 DSH-owned 模型流桥
+## Task B4: Implement the DSH-owned model stream bridge
 
 **Files:**
 
@@ -220,17 +224,17 @@
 - Test: `packages/core/agent-loop-pi/tests/model-bridge.spec.ts`
 - Test: `packages/core/agent-loop-pi/tests/stream-conversion.spec.ts`
 
-- [ ] 先写失败测试：text、reasoning、tool-call arguments delta、usage、stop/tool-calls/max-tokens/error/aborted；源流无 terminal finish 时必须生成 `MODEL_STREAM_CLOSED`；一次 step 内设置变更不改变冻结 route。
+- [ ] First write failing tests: text, reasoning, tool-call arguments delta, usage, stop/tool-calls/max-tokens/error/aborted; a source stream without terminal finish must produce `MODEL_STREAM_CLOSED`; settings changes within a step cannot alter the frozen route.
 
-- [ ] 运行失败测试。
+- [ ] Run the failing tests.
 
   Run: `pnpm vitest run packages/core/agent-loop-pi/tests/model-bridge.spec.ts packages/core/agent-loop-pi/tests/stream-conversion.spec.ts`
 
-- [ ] `DshModelStreamBridge.resolve()` 只通过 DSH model selection 和 LLM catalog 返回 `FrozenModelSelection`。`stream()` 固定调用 `agent/request`、`llm.prepareCall()` 和固定 DSH Agent Loop 的 `agent/request-error` waterfall/retry path，不直接读取 settings 文件或 credential store。`MODEL_CONTEXT_WINDOW_EXCEEDED` 只有在 DSH compaction listener 成功发布新 surface 时重做当前 step；普通 transport retry 与 compaction retry 使用 DSH 原有独立预算，Pi driver 不增加第三个计数器。
+- [ ] `DshModelStreamBridge.resolve()` returns `FrozenModelSelection` only through DSH model selection and the LLM catalog. `stream()` must call `agent/request`, `llm.prepareCall()`, and the pinned DSH Agent Loop's `agent/request-error` waterfall/retry path, never read settings files or the credential store directly. `MODEL_CONTEXT_WINDOW_EXCEEDED` retries the current step only when the DSH compaction listener successfully publishes a new surface; ordinary transport retries and compaction retries use DSH's existing separate budgets, and the Pi driver adds no third counter.
 
-- [ ] 使用 `createAssistantMessageEventStream()` 构建 Pi stream。转换 producer 必须捕获所有错误并推入 terminal `error` event；不得让 `StreamFn` reject：
+- [ ] Build the Pi stream with `createAssistantMessageEventStream()`. The conversion producer must catch every error and push a terminal `error` event; never let `StreamFn` reject:
 
-  ```ts
+  ```ts design
   const stream = createAssistantMessageEventStream()
   void pumpDshChunks(prepared, stream, signal).catch(error => {
     stream.push({ type: 'error', error: failureAssistantMessage(error, prepared.model) })
@@ -238,11 +242,11 @@
   return stream
   ```
 
-  `pumpDshChunks` 对 DSH `block-start`/delta/`block-end`/usage/finish 建立 Pi partial message；terminal finish 只 push 一次 `done` 或 `error`。
+  `pumpDshChunks` builds the Pi partial message from DSH `block-start`/delta/`block-end`/usage/finish; terminal finish pushes `done` or `error` exactly once.
 
-- [ ] 证明 credential 只由 DSH prepared call 内部解析，测试快照和错误中不出现 key。
+- [ ] Prove that credentials are resolved only inside the DSH prepared call and no key appears in test snapshots or errors.
 
-- [ ] 运行测试并提交。
+- [ ] Run tests and commit.
 
   Run:
 
@@ -252,7 +256,7 @@
   git commit -m "feat: route Pi model streams through DSH LLM"
   ```
 
-## Task B5：实现工具桥和副作用前 durability barrier
+## Task B5: Implement the tool bridge and durability barrier before side effects
 
 **Files:**
 
@@ -261,17 +265,17 @@
 - Test: `packages/core/agent-loop-pi/tests/tool-bridge.spec.ts`
 - Test: `packages/core/agent-loop-pi/tests/tool-commit-buffer.spec.ts`
 
-- [ ] 先写失败测试，覆盖：schema snapshot、未知工具、坏参数、approval allow/deny、timeout、cancel、工具 throw、`additionalContexts`、`concludesTurn`、两个并行工具反序完成但源序提交。
+- [ ] First write failing tests covering schema snapshots, unknown tools, invalid arguments, approval allow/deny, timeout, cancel, tool throws, `additionalContexts`, `concludesTurn`, and two parallel tools completing in reverse order but committing in source order.
 
-- [ ] 添加严格时序测试：在工具 body 的第一行记录 marker；断言 marker 之前已经发生 `commitToolCall` 和 `flush('before-tool-effect')`。让 flush reject，断言 body 从未执行。
+- [ ] Add strict ordering tests: record a marker on the first line of the tool body; assert that `commitToolCall` and `flush('before-tool-effect')` have occurred before it. Make flush reject and assert the body never executes.
 
-- [ ] 运行失败测试。
+- [ ] Run the failing tests.
 
   Run: `pnpm vitest run packages/core/agent-loop-pi/tests/tool-bridge.spec.ts packages/core/agent-loop-pi/tests/tool-commit-buffer.spec.ts`
 
-- [ ] `snapshot()` 深冻结 `ctx.tools.schemas(agent)`。Pi wrapper 的 `execute` 只调用：
+- [ ] `snapshot()` deeply freezes `ctx.tools.schemas(agent)`. The Pi wrapper's `execute` calls only:
 
-  ```ts
+  ```ts design
   ctx.tools.execute({
     callId: call.callId,
     name: call.name,
@@ -281,13 +285,13 @@
   })
   ```
 
-  禁止调用 `ToolDefinition.execute()`，禁止在 Pi hooks 重做审批。
+  Do not call `ToolDefinition.execute()` or repeat approval in Pi hooks.
 
-- [ ] 在 Pi `tool_execution_start` 的 awaited sink 中：append `tool/call` -> 保存 call seq -> await `flush('before-tool-effect')` -> 允许 wrapper body 继续。完整 DSH result 缓存到 callId；Pi content/details 只是运行格式。
+- [ ] In the awaited sink for Pi `tool_execution_start`: append `tool/call` -> save call seq -> await `flush('before-tool-effect')` -> allow the wrapper body to continue. Cache the complete DSH result by callId; Pi content/details are runtime representations only.
 
-- [ ] `ToolCommitBuffer` 只有同时收到执行完成和 toolResult `message_end` 才可 drain；从最小未提交 sourceIndex 连续输出；step end 调用 `assertEmptyAtStepEnd()`。
+- [ ] `ToolCommitBuffer` may drain only after receiving both execution completion and toolResult `message_end`; emit continuously from the smallest uncommitted sourceIndex; call `assertEmptyAtStepEnd()` at step end.
 
-- [ ] 运行测试并提交。
+- [ ] Run tests and commit.
 
   Run:
 
@@ -297,7 +301,7 @@
   git commit -m "feat: execute Pi tools through the DSH pipeline"
   ```
 
-## Task B6：实现 SessionCommitPort 和事件状态机
+## Task B6: Implement SessionCommitPort and the event state machine
 
 **Files:**
 
@@ -307,31 +311,33 @@
 - Test: `packages/core/agent-loop-pi/tests/session-commit.spec.ts`
 - Test: `packages/core/agent-loop-pi/tests/event-projector.spec.ts`
 
-- [ ] 先写事件状态机失败矩阵：缺 run start、嵌套 step、双 assistant complete、未知 call result、step 未清空 tool buffer、run complete 后还有 event、重复 event index。
+- [ ] First write the failing event-state-machine matrix: missing run start, nested step, duplicate assistant complete, unknown call result, nonempty tool buffer at step end, events after run complete, and repeated event index.
 
-- [ ] 先写 durable 映射测试：assistant delta 只发布 transient；assistant complete 追加一次 durable message；tool result 的 `sourceEventSeqs` 精确为对应 call seq；run complete 追加 turn/end 后 flush。
+- [ ] First write durable mapping tests: assistant deltas publish only transient events; assistant complete appends one durable message; tool-result `sourceEventSeqs` exactly match the corresponding call seq; run complete appends turn/end and then flushes.
 
-- [ ] 运行失败测试。
+- [ ] Run the failing tests.
 
   Run: `pnpm vitest run packages/core/agent-loop-pi/tests/session-commit.spec.ts packages/core/agent-loop-pi/tests/event-projector.spec.ts`
 
-- [ ] `SessionCommitPort` 只包装 AgentFactory 已有的 DSH Session 和 write handle：
+- [ ] `SessionCommitPort` only wraps the AgentFactory's existing DSH Session and write handle:
 
-  ```ts
-  async flush(reason: FlushReason, signal?: AbortSignal): Promise<void> {
-    try {
-      await this.write.flush(signal)
-    } catch (cause) {
-      throw stableFailure('SESSION', 'SESSION_WRITE_FAILED', reason, cause)
+  ```ts design
+  class SessionCommitPortExcerpt {
+    async flush(reason: FlushReason, signal?: AbortSignal): Promise<void> {
+      try {
+        await this.write.flush(signal)
+      } catch (cause) {
+        throw stableFailure('SESSION', 'SESSION_WRITE_FAILED', reason, cause)
+      }
     }
   }
   ```
 
-  不创建文件、不持有 SQLite、不另存 event。每个 `(runId,eventIndex)` 有一次性提交 ledger；重复直接抛 `KERNEL_EVENT_ORDER`。
+  It creates no files, holds no SQLite database, and saves no separate events. Each `(runId,eventIndex)` has a one-time commit ledger; duplicates immediately throw `KERNEL_EVENT_ORDER`.
 
-- [ ] `EventProjector.onEvent()` 使用 closed-union switch。`message.delta` 发布 DSH `agent/assistant-stream`；`message.completed` 和 tool results 才 append；`run.completed` 的顺序固定为 append turn/end -> `flush('turn-settled')` -> 发布 idle。
+- [ ] `EventProjector.onEvent()` uses a closed-union switch. `message.delta` publishes DSH `agent/assistant-stream`; only `message.completed` and tool results append; `run.completed` follows the fixed order append turn/end -> `flush('turn-settled')` -> publish idle.
 
-- [ ] 运行测试并提交。
+- [ ] Run tests and commit.
 
   Run:
 
@@ -341,7 +347,7 @@
   git commit -m "feat: commit Pi events to the DSH session log"
   ```
 
-## Task B7：实现 PiKernelDriver
+## Task B7: Implement PiKernelDriver
 
 **Files:**
 
@@ -349,23 +355,23 @@
 - Test: `packages/core/agent-loop-pi/tests/pi-kernel-driver.spec.ts`
 - Modify: `packages/core/agent-loop-pi/tests/kernel-driver.conformance.ts`
 
-- [ ] 让同一 conformance suite 分别运行 MockKernelDriver 和 PiKernelDriver；先确认 Pi 实现失败。
+- [ ] Run the same conformance suite against MockKernelDriver and PiKernelDriver; first confirm the Pi implementation fails.
 
-- [ ] 构造 Pi `Agent` 时显式传入 DSH model `streamFn`、DSH tool wrappers、`steeringMode: 'one-at-a-time'`、`followUpMode: 'one-at-a-time'`。`getFollowUpMessages` 的产品语义必须始终为空；DSH next-turn 在外层开新 run。
+- [ ] Construct Pi `Agent` with explicit DSH model `streamFn`, DSH tool wrappers, `steeringMode: 'one-at-a-time'`, and `followUpMode: 'one-at-a-time'`. The product semantics of `getFollowUpMessages` must always be empty; DSH next-turn starts a new run in the outer layer.
 
-- [ ] 使用 async subscriber 串行桥接：
+- [ ] Bridge serially using an async subscriber:
 
-  ```ts
+  ```ts design
   const unsubscribe = piAgent.subscribe(async (event, signal) => {
     await sink.onEvent(toKernelEvent(event, positions), signal)
   })
   ```
 
-  run cleanup 必须在 `piAgent.prompt()` settle、最后一个 listener settle 和 unsubscribe 后完成。`abort()` 同时中止 provider 和已开始工具。
+  Run cleanup must complete after `piAgent.prompt()` settles, the last listener settles, and unsubscribe completes. `abort()` stops both the provider and tools that have started.
 
-- [ ] 对 Pi sourceIndex 以 assistant toolCall block 顺序计算，不以 `tool_execution_end` 完成顺序计算。
+- [ ] Compute Pi sourceIndex from assistant toolCall block order, never `tool_execution_end` completion order.
 
-- [ ] 运行测试和 boundary gate。
+- [ ] Run tests and the boundary gate.
 
   Run:
 
@@ -374,7 +380,7 @@
   pnpm run check:local-harness:kernel
   ```
 
-- [ ] 提交。
+- [ ] Commit.
 
   Run:
 
@@ -383,7 +389,7 @@
   git commit -m "feat: drive DSH turns with Pi Agent Core"
   ```
 
-## Task B8：接入 DshPiAgent 生命周期、Inbox 和消息确认屏障
+## Task B8: Integrate the DshPiAgent lifecycle, Inbox, and message acknowledgment barrier
 
 **Files:**
 
@@ -396,9 +402,9 @@
 - Test: `packages/core/agent-loop-pi/tests/pi-agent.spec.ts`
 - Create: `packages/api/session-controller/tests/commands-durability.host.spec.ts`
 
-- [ ] 在 core Agent 定义实现无关端口：
+- [ ] Define an implementation-independent port in core Agent:
 
-  ```ts
+  ```ts design
   export type AgentFlushReason = 'message-ack' | 'before-tool-effect' | 'turn-settled'
 
   export abstract class AgentDurability extends Service {
@@ -406,22 +412,22 @@
   }
   ```
 
-  Agent Loop Pi 提供该 service 并把 sessionId 路由到唯一 write handle；API 只依赖 core Agent 定义，不依赖 Pi package。
+  Agent Loop Pi provides this service and routes sessionId to the sole write handle; API depends only on the core Agent definition, not the Pi package.
 
-- [ ] 复制固定 DSH `inbox.ts` 的持久 splice 行为并只做命名空间调整；保持 `replace/remove`、claim、wakeup 和投影语义。
+- [ ] Copy the pinned DSH `inbox.ts` persistent splice behavior with namespace adjustments only; preserve `replace/remove`, claim, wakeup, and projection semantics.
 
-- [ ] 先写 `DshPiAgent` 测试：followup -> next-turn；steer/inject -> next-step；running 时没有第二 run；cancel 等待工具 quiescence；`whenIdle()` 包含取消收尾；maintenance 与 run 互斥。
+- [ ] First write `DshPiAgent` tests: followup -> next-turn; steer/inject -> next-step; no second run while running; cancel awaits tool quiescence; `whenIdle()` includes cancellation cleanup; maintenance and run are mutually exclusive.
 
-- [ ] 在 `ApiSessionCommands.prompt()` 中，`agent.followup/steer(message)` 与 file binding commit 完成后，必须：
+- [ ] In `ApiSessionCommands.prompt()`, after `agent.followup/steer(message)` and file binding commit complete, require:
 
-  ```ts
+  ```ts design
   await this.ctx.agentDurability.flush(agent.id, 'message-ack')
   return { accepted: true }
   ```
 
-  幂等 `requestId` 命中已存在 prompt 时必须确认对应 splice 已持久；flush reject 映射 `session/write-failed`，不能返回 accepted。
+  An idempotent `requestId` hit on an existing prompt must confirm the corresponding splice is durable; map flush rejection to `session/write-failed`, never return accepted.
 
-- [ ] 运行测试并提交。
+- [ ] Run tests and commit.
 
   Run:
 
@@ -431,7 +437,7 @@
   git commit -m "feat: preserve DSH inbox semantics around Pi runs"
   ```
 
-## Task B9：通过 DSH machine seam 安装 Pi 并切换默认组合
+## Task B9: Install Pi through the DSH machine seam and switch the default composition
 
 **Files:**
 
@@ -443,28 +449,28 @@
 - Test: `packages/core/agent-loop-pi/tests/recovery.spec.ts`
 - Modify: `scripts/verify-pi-kernel-boundary.ts`
 
-- [ ] `PiAgentLoop extends AgentLoop`，只 override PR-A 提供的 protected `createMachine(input)` 并返回 `new DshPiAgent(...)`。禁止复制或重新实现 SessionPreparation、write handle、scope setup/commit、registry publish、created/disposed pairing、create/resume 和逆序 rollback。
+- [ ] `PiAgentLoop extends AgentLoop` overrides only PR-A's protected `createMachine(input)` and returns `new DshPiAgent(...)`. Never copy or reimplement SessionPreparation, write handle, scope setup/commit, registry publish, created/disposed pairing, create/resume, or reverse-order rollback.
 
-- [ ] 用 `PiAgentLoop` 复用 DSH lifecycle contract，并写创建失败点参数化测试：Session prepare、write ownership、scope setup、seed append、session register、agent register、created listener。每个失败点断言无泄漏 handle/scope/registry entry；静态门禁断言 Pi 包没有 `implements AgentFactory`、`setupAndPublish` 或 `resumeWith` 的副本。
+- [ ] Reuse the DSH lifecycle contract with `PiAgentLoop` and write parameterized creation-failure tests: Session prepare, write ownership, scope setup, seed append, session register, agent register, and created listener. Assert no leaked handle/scope/registry entry at every failure point; a static gate rejects copies of `implements AgentFactory`, `setupAndPublish`, or `resumeWith` in the Pi package.
 
-- [ ] 先写恢复测试：只从 committed DSH prefix 恢复；调用 `interruptedTurnClosers`；开放 tool call 收敛为 `TOOL_OUTCOME_UNKNOWN`，绝不重新执行；Pi state/messages 没有恢复入口。
+- [ ] First write recovery tests: recover only from the committed DSH prefix; call `interruptedTurnClosers`; resolve open tool calls as `TOOL_OUTCOME_UNKNOWN`, never execute them again; Pi state/messages have no recovery entry.
 
-- [ ] 替换 base dependency：
+- [ ] Replace the base dependency:
 
   ```json
   "@local-harness/pi-agent-loop": "workspace:*"
   ```
 
-  base 只直接激活新包；新包通过 workspace dependency 继承 `@deepseek-ai/dsh-agent-loop`，但后者不得作为第二条 Cordis plugin 配置出现。保留原 package 源码和测试作为唯一 lifecycle 实现。`cordis.patch.yml` 同一位置改为：
+  Base directly activates only the new package; the new package inherits `@deepseek-ai/dsh-agent-loop` through a workspace dependency, but the latter must not appear as a second Cordis plugin configuration. Retain the original package source and tests as the sole lifecycle implementation. Change the same position in `cordis.patch.yml` to:
 
   ```yaml
   - id: agent-loop
     name: '@local-harness/pi-agent-loop'
   ```
 
-- [ ] boundary verifier 解析 base patch，断言活动 `AgentFactory` 恰好一个且名称为新包；同时解析 production source/lock graph，允许新包依赖 DSH agent-loop superclass，但拒绝第二个被激活的 Agent Loop、复制 lifecycle 标识符和任何 Pi harness 子路径。
+- [ ] The boundary verifier parses the base patch and asserts exactly one active `AgentFactory`, named as the new package; it also parses the production source/lock graph, allowing the new package to depend on the DSH agent-loop superclass but rejecting a second activated Agent Loop, duplicated lifecycle identifiers, or any Pi harness subpath.
 
-- [ ] 运行测试。
+- [ ] Run tests.
 
   Run:
 
@@ -475,7 +481,7 @@
   pnpm run build:lib
   ```
 
-- [ ] 提交。
+- [ ] Commit.
 
   Run:
 
@@ -484,7 +490,7 @@
   git commit -m "feat: activate Pi as the only DSH agent loop"
   ```
 
-## Task B10：完成 mock OpenAI、工具与恢复集成矩阵
+## Task B10: Complete the mock OpenAI, tool, and recovery integration matrix
 
 **Files:**
 
@@ -497,25 +503,25 @@
 - Modify: `packages/core/agent-loop-pi/README.md`
 - Modify: `packages/core/agent-loop-pi/README.zh.md`
 
-- [ ] Mock server 实现 Responses 与 Chat Completions 两个显式 endpoint，只绑定 `127.0.0.1` 随机端口；支持文本 delta、tool call、反序工具、429/500、流中断、取消。
+- [ ] The mock server implements two explicit endpoints, Responses and Chat Completions, and binds only to a random port on `127.0.0.1`; support text deltas, tool calls, reversed tool order, 429/500, stream interruption, and cancellation.
 
-- [ ] 集成矩阵至少覆盖需求 `TEST-002`、`TEST-003`、`TEST-004` 的内核相关项。每个用例最终断言 DSH Session event prefix，而不是 Pi 内存 messages。
+- [ ] The integration matrix covers at least the kernel-related items of requirements `TEST-002`, `TEST-003`, and `TEST-004`. Each case ultimately asserts the DSH Session event prefix, not Pi in-memory messages.
 
-- [ ] crash harness 用子进程和明确 barrier marker 终止进程；父进程恢复后断言：确认过的消息存在、未确认消息可以不存在、started-without-result 工具为 unknown、无副作用自动重放、turn/step 平衡。
+- [ ] The crash harness uses child processes and explicit barrier markers to terminate a process; after recovery, the parent asserts that acknowledged messages exist, unacknowledged messages may be absent, started-without-result tools are unknown, no side effects replay automatically, and turns/steps balance.
 
-- [ ] 新增 Pi compaction 集成矩阵，使用固定 DSH `compaction-loop-repro.spec.ts` 的小 context-window 思路，但 AgentFactory 换为 Pi：
+- [ ] Add a Pi compaction integration matrix using the small context-window approach from pinned DSH `compaction-loop-repro.spec.ts`, but replace AgentFactory with Pi:
 
-  1. `pressure`: 多个含 tool result 的 step 越过阈值，断言 `compaction/start -> summary -> end` 位于前一 `step/end` 与下一 `step/start` 之间。
-  2. `context-overflow`: mock 第一次返回 `MODEL_CONTEXT_WINDOW_EXCEEDED`，DSH 只压缩一次，同一 step 用新 surface 重试成功；断言 transport retry budget 未被消费。
-  3. `manual`: 经 DSH Commands 执行 `/compact`，断言 command 产生的 generation 被下一 Pi step 使用。
-  4. `failure`: summarizer 失败或新 surface 仍超限时旧 generation 保持有效，run 以稳定错误结束；记录调用次数并断言没有循环。
-  5. `restart`: compaction/end flush 后强制终止，恢复的首个 step 从 DSH surface 投影；仓库中未创建 Pi session/compaction 文件。
+  1. `pressure`: multiple steps with tool results cross the threshold; assert `compaction/start -> summary -> end` falls between the previous `step/end` and next `step/start`.
+  2. `context-overflow`: the mock first returns `MODEL_CONTEXT_WINDOW_EXCEEDED`; DSH compacts exactly once and retries the same step successfully with the new surface; assert the transport retry budget was not consumed.
+  3. `manual`: execute `/compact` through DSH Commands; assert the next Pi step uses the generation produced by the command.
+  4. `failure`: when the summarizer fails or the new surface still exceeds the limit, the old generation remains valid and the run ends with a stable error; record call counts and assert no loop.
+  5. `restart`: force termination after compaction/end flush; the first recovered step projects from the DSH surface; no Pi session/compaction files are created in the repository.
 
-  每个用例必须断言 DSH durable events、surface generation 和模型实际收到的 message ids，不能只检查 UI 文本或 Pi 内存状态。
+  Every case must assert DSH durable events, surface generation, and the message ids actually received by the model; checking only UI text or Pi in-memory state is insufficient.
 
-- [ ] Agent Note 记录 Pi 事件与 DSH turn/step 映射、三个 flush barrier、tool result 重排、为何 Pi follow-up queue 不承载 DSH next-turn。
+- [ ] The Agent Note records the Pi event to DSH turn/step mapping, three flush barriers, tool-result reordering, and why the Pi follow-up queue does not carry DSH next-turn.
 
-- [ ] 运行完整 PR-B 门禁。
+- [ ] Run all PR-B gates.
 
   Run:
 
@@ -530,9 +536,9 @@
   git diff --check
   ```
 
-  Expected: 全部通过；无密钥；没有 Pi Session 文件或第二个聊天数据库。
+  Expected: all pass; no keys; no Pi Session files or second chat database.
 
-- [ ] 提交文档、推送并创建 Draft PR。
+- [ ] Commit documentation, push, and create a Draft PR.
 
   Run:
 
@@ -543,18 +549,18 @@
   gh pr create --draft --title "feat: replace the DSH loop with the Pi kernel driver" --body-file .\.github\pull_request_template.md
   ```
 
-## 可选拆分规则
+## Optional split rules
 
-只有触发主计划阈值时才拆：
+Split only when the master-plan thresholds trigger:
 
-- B1：Task B1–B4，提交 KernelDriver、消息与 DSH 模型流，但不激活默认组合。
-- B2：Task B5–B10，提交工具/Session/Pi machine 并切换默认组合。
+- B1: Tasks B1–B4 deliver KernelDriver, messages, and the DSH model stream without activating the default composition.
+- B2: Tasks B5–B10 deliver tools/Session/Pi machine and switch the default composition.
 
-B1 的 public type 仍只在私有 package 内；B1 不得让半成品包进入 base composition。B2 必须基于 B1，不允许平行修改同一 bridge 文件。
+B1 public types remain inside the private package; B1 must not add an unfinished package to base composition. B2 must build on B1; never edit the same bridge file in parallel.
 
-## PR-B 工期与交接门禁
+## PR-B effort and handoff gates
 
-- 预计净工作量：7–10 个工作日，约 1.2–1.8 个 GPT-5.6 Sol Plus 完整周额度。
-- 推荐节奏：B1–B3 为 2–3 日，B4–B6 为 2–3 日，B7–B9 为 2 日，B10/修复为 1–2 日；不得同时让两个 agent 编辑状态机或 SessionCommitPort。
-- Day 3 检查 typed KernelDriver/message conversion；Day 6 检查模型/工具/flush；Day 8 检查唯一 AgentFactory、继承 lifecycle、恢复和 compaction；第 9–10 日仅作失败修复与复审。
-- PR-B 不得带入产品 UI。可结束条件是全部 contract matrix、crash recovery、Pi compaction matrix 和 dependency boundary 通过，Draft PR 描述附真实命令输出。
+- Estimated net effort: 7–10 working days, approximately 1.2–1.8 full GPT-5.6 Sol Plus weekly quotas.
+- Recommended cadence: B1–B3 take 2–3 days, B4–B6 take 2–3 days, B7–B9 take 2 days, and B10/fixes take 1–2 days; never let two agents edit the state machine or SessionCommitPort concurrently.
+- Day 3 checks typed KernelDriver/message conversion; day 6 checks model/tools/flush; day 8 checks the sole AgentFactory, inherited lifecycle, recovery, and compaction; days 9–10 are only for failure fixes and rereview.
+- PR-B must not include product UI. Completion requires passing the full contract matrix, crash recovery, Pi compaction matrix, and dependency boundary, with actual command output attached to the Draft PR description.

@@ -1,85 +1,87 @@
 # Local-Harness-pi V1 Implementation Plan
 
+English | [中文](2026-09-10-local-harness-pi-v1-master.zh.md)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在新的 `Local-Harness-pi` 仓库中，以固定 DSH 源码为产品平台，只替换 Agent Loop 为 Pi Agent Core，并完成 Windows Electron V1 产品闭环。
+**Goal:** In the new `Local-Harness-pi` repository, use pinned DSH source as the product platform, replace only Agent Loop with Pi Agent Core, and complete the Windows Electron V1 product workflow.
 
-**Architecture:** 保留 DSH Electron、Client、Session、LLM、Tools、Goal/Plan、Skill 和 MCP 所有权；PR-A 为 DSH `AgentLoop` 提取行为中性的 machine-construction seam，`@local-harness/pi-agent-loop` 继承该 lifecycle 并成为唯一活动 `AgentFactory`。GUI-managed MCP 仅增加 DSH settings/Host 控制面，执行仍使用同一个 DSH MCP Client 与 Tool Registry。DSH append-only Session 是唯一对话/执行恢复事实源，Pi 状态、Client transient state 和 SQLite 搜索索引都只允许作为派生状态；领域 Decision/Evidence/Artifact 可有自己的 owner/store，但不得复制 transcript 或执行日志。
+**Architecture:** Preserve DSH ownership of Electron, Client, Session, LLM, Tools, Goal/Plan, Skill, and MCP. PR-A extracts a behavior-neutral machine-construction seam from DSH `AgentLoop`; `@local-harness/pi-agent-loop` inherits that lifecycle and becomes the sole active `AgentFactory`. GUI-managed MCP adds only a DSH settings/Host control plane; execution still uses the same DSH MCP Client and Tool Registry. DSH append-only Session is the sole source of conversation/execution recovery truth; Pi state, Client transient state, and SQLite search indexes are derived only. Domain Decision/Evidence/Artifact objects may have their own owners/stores but must not duplicate transcripts or execution logs.
 
-**Tech Stack:** Node.js 22.19+、pnpm 11.7.0、TypeScript 6、Electron 44、React、Cordis、Vitest 及其 browser runner、`@earendil-works/pi-agent-core@0.85.1`、`@earendil-works/pi-ai@0.85.1`。
+**Tech Stack:** Node.js 22.19+, pnpm 11.7.0, TypeScript 6, Electron 44, React, Cordis, Vitest and its browser runner, `@earendil-works/pi-agent-core@0.85.1`, and `@earendil-works/pi-ai@0.85.1`.
 
 ---
 
-## 0. 计划集与执行顺序
+## 0. Plan set and execution order
 
-本主计划只负责顺序、门禁和 PR 交付。具体代码步骤在三个子计划中：
+This master plan owns sequencing, gates, and PR delivery only. Detailed implementation steps are in three subplans:
 
-1. [PR-A：DSH 基线、产品边界与 machine seam](2026-09-10-local-harness-pi-pr-a-dsh-baseline.md)
-2. [PR-B：Pi 内核桥接](2026-09-10-local-harness-pi-pr-b-pi-kernel.md)
-3. [PR-C：V1 产品闭环](2026-09-10-local-harness-pi-pr-c-product-loop.md)
+1. [PR-A: DSH baseline, product boundaries, and machine seam](2026-09-10-local-harness-pi-pr-a-dsh-baseline.md)
+2. [PR-B: Pi kernel bridge](2026-09-10-local-harness-pi-pr-b-pi-kernel.md)
+3. [PR-C: Complete V1 product workflow](2026-09-10-local-harness-pi-pr-c-product-loop.md)
 
-依赖顺序固定为 `PR-A -> PR-B -> PR-C`。本次架构修正按 [Agent Machine Seam Rectification Plan](2026-09-18-agent-machine-seam-rectification.md) 纳入未完成的 PR-A/PR-B，不另开 A.5：machine seam 属于 PR-A，typed Kernel contract 和 `PiAgentLoop` 子类属于 PR-B。方案 2 的 About/许可属于 PR-A，Compaction/会话内核回归属于 PR-B，GUI-managed MCP 与完整产品回归属于 PR-C，不另开第四条长期分支。只有 PR-B 单个 diff 超过约 2,500 行手写业务代码或连续两轮复审仍无法收敛时，才允许按子计划规定拆为 B1/B2；不得把 MCP 或 UI 与 PR-B 平行开发后再猜测接口。
+Dependency order is fixed as `PR-A -> PR-B -> PR-C`. The [Agent Machine Seam Rectification Plan](2026-09-18-agent-machine-seam-rectification.md) folds this architecture correction into unfinished PR-A/PR-B rather than creating A.5: the machine seam belongs to PR-A; typed Kernel contracts and the `PiAgentLoop` subclass belong to PR-B. Option 2 About/licenses belong to PR-A, Compaction/session-kernel regression to PR-B, and GUI-managed MCP/full product regression to PR-C; do not create a fourth long-lived branch. Only if one PR-B diff exceeds roughly 2,500 handwritten business-code lines or cannot converge after two consecutive review rounds may it split into B1/B2 as specified by its subplan. Do not develop MCP/UI in parallel with PR-B and guess the interfaces afterward.
 
-### 需求到任务的追踪
+### Requirement-to-task traceability
 
-| 需求 | 实施任务 | 主要验收证据 |
+| Requirements | Implementation tasks | Main acceptance evidence |
 |---|---|---|
-| `PLAT-001`–`PLAT-003` | A1–A7、C8、C9 | Windows unsigned NSIS、版本锁、来源与许可证门禁、默认 AgentLoop 回归 |
-| `FR-001`–`FR-004` | A3–A5、C9 | workspace/单实例/窗口安全、About/离线许可与 Windows smoke |
-| `FR-010`–`FR-019` | B3、B4、B8–B10、C7、C9 | Agent 生命周期、消息确认、恢复、Compaction、会话整理/分叉/搜索/导出矩阵 |
-| `FR-020`–`FR-025` | B1–B9 | dependency boundary、KernelDriver conformance、唯一 AgentFactory |
-| `FR-030`–`FR-037` | B4、C1、C9 | 本地/云端 Responses 与 Completions、首次启动及发现回退矩阵 |
-| `FR-040`–`FR-047` | B5、B6、B10、C6、C7 | 工具、审批、workspace、失败、上下文、Diff/Terminal 与工具卡测试 |
-| `FR-050`–`FR-052` | C5、C7、C9 | `/goal`、`/plan`、Plus 菜单与恢复测试 |
-| `FR-060`–`FR-067` | C2–C5、C7、C9 | Skill、MCP CRUD/CAS/凭据、插件清单、有效权限与失败隔离测试 |
-| `FR-070`–`FR-072` | C5、C7、C9 | 附件、PDF 预览、Web tools 产品流 |
-| `FR-073`–`FR-074` | V1.1 | V1 越界扫描和 known-limitations 记录 |
-| `FR-080`–`FR-083` | C1、C4–C6 | settings section、单一状态源、Plus 菜单与折叠工具卡 |
-| `FR-090`–`FR-091` | C8、C9 | 手工检查/下载、不可达安装路径与失败隔离测试 |
-| `FR-092` | V1.1 | V1 越界扫描和 known-limitations 记录 |
-| `NFR-001`–`NFR-006` | B3–B10、C6、C7、C9 | Session ordering、三类 flush、Compaction、crash/SQLite 重建矩阵 |
-| `NFR-010`–`NFR-014` | A5、B4、B5、C1–C4、C8、C9 | credential/network/Electron/MCP/plugin/log redaction 矩阵 |
-| `NFR-020`–`NFR-022` | B7–B10、C3、C4、C9 | 基线对比、缓存上界、MCP reconcile、取消与资源回收测试 |
-| `NFR-030`–`NFR-032` | C4–C7、C9 | 键盘、错误操作建议和状态可理解性测试 |
-| `TEST-001`–`TEST-006` | A2、A3、B1、B10、C1、C3、C7、C9 | source/dependency、model、tool、recovery、product、安全矩阵 |
-| `AC-001`–`AC-010` | B10、C1、C3、C5、C7、C9 | 本地/云模型、恢复、共存、UI 去重、首次启动、会话库、MCP 与长会话端到端证据 |
+| `PLAT-001`–`PLAT-003` | A1–A7, C8, C9 | Windows unsigned NSIS, version locks, provenance/license gates, default AgentLoop regression |
+| `FR-001`–`FR-004` | A3–A5, C9 | Workspace/single-instance/window security, About/offline licenses, Windows smoke |
+| `FR-010`–`FR-019` | B3, B4, B8–B10, C7, C9 | Agent lifecycle, message acknowledgement, recovery, Compaction, session organization/fork/search/export matrix |
+| `FR-020`–`FR-025` | B1–B9 | Dependency boundary, KernelDriver conformance, sole AgentFactory |
+| `FR-030`–`FR-037` | B4, C1, C9 | Local/cloud Responses and Completions, first launch and discovery fallback matrix |
+| `FR-040`–`FR-047` | B5, B6, B10, C6, C7 | Tool, approval, workspace, failure, context, Diff/Terminal, and tool-card tests |
+| `FR-050`–`FR-052` | C5, C7, C9 | `/goal`, `/plan`, Plus menu, and recovery tests |
+| `FR-060`–`FR-067` | C2–C5, C7, C9 | Skill, MCP CRUD/CAS/credentials, plugin inventory, effective permissions, failure-isolation tests |
+| `FR-070`–`FR-072` | C5, C7, C9 | Attachments, PDF preview, Web tools product flow |
+| `FR-073`–`FR-074` | V1.1 | V1 scope-violation scan and known-limitations record |
+| `FR-080`–`FR-083` | C1, C4–C6 | Settings sections, single state source, Plus menu, collapsed tool cards |
+| `FR-090`–`FR-091` | C8, C9 | Manual check/download, unreachable installation path, failure-isolation tests |
+| `FR-092` | V1.1 | V1 scope-violation scan and known-limitations record |
+| `NFR-001`–`NFR-006` | B3–B10, C6, C7, C9 | Session ordering, three flush barriers, Compaction, crash/SQLite rebuild matrix |
+| `NFR-010`–`NFR-014` | A5, B4, B5, C1–C4, C8, C9 | Credential/network/Electron/MCP/plugin/log-redaction matrix |
+| `NFR-020`–`NFR-022` | B7–B10, C3, C4, C9 | Baseline comparison, cache bounds, MCP reconcile, cancellation/resource-cleanup tests |
+| `NFR-030`–`NFR-032` | C4–C7, C9 | Keyboard, actionable errors, and understandable-state tests |
+| `TEST-001`–`TEST-006` | A2, A3, B1, B10, C1, C3, C7, C9 | Source/dependency, model, tool, recovery, product, and security matrices |
+| `AC-001`–`AC-010` | B10, C1, C3, C5, C7, C9 | Local/cloud models, recovery, coexistence, UI deduplication, first launch, session library, MCP, and long-session end-to-end evidence |
 
-每个需求只能由其权威需求文档改变优先级；本表用于证明覆盖关系，不复制需求正文。
+Only the authoritative requirements document may change requirement priority; this table demonstrates coverage without duplicating requirement content.
 
-## 1. 固定输入
+## 1. Fixed inputs
 
-### 上游版本
+### Upstream versions
 
 - DeepSeek Harness：`b2e3b2a0125854567a4a5fcba75782e42fe84901`
 - Pi：`acaa253cc8e3f159e6100b6f3874861b1f0bfc99`
-- Pi npm：`@earendil-works/pi-agent-core@0.85.1` 与 `@earendil-works/pi-ai@0.85.1`
-- Codex 交互参考：`73a1148c9c775c2a4616ce5096291740a00ed68a`
-- Local-Harness-pi 首个产品版本：直接继承固定 DSH 基线 `0.1.5-alpha.2`，不做全 workspace 机械改版。DSH 原包仍由 DSH family gate 管理；新增 `@local-harness/*` 全部是不可发布的 private workspace member，由 A2 的 Local verifier 单独强制同版本、无 `publishConfig`。
+- Pi npm: `@earendil-works/pi-agent-core@0.85.1` and `@earendil-works/pi-ai@0.85.1`
+- Codex interaction reference: `73a1148c9c775c2a4616ce5096291740a00ed68a`
+- Initial Local-Harness-pi product version: inherit the pinned DSH baseline `0.1.5-alpha.2` directly without a mechanical workspace-wide version rewrite. Original DSH packages remain governed by the DSH family gate; all new `@local-harness/*` packages are non-publishable private workspace members, with A2's Local verifier independently enforcing equal versions and no `publishConfig`.
 
-### 权威项目文档
+### Authoritative project documents
 
 - `docs/superpowers/specs/2026-09-09-local-harness-pi-v1-design.md`
 - `docs/requirements/v1-requirements.md`
 - `docs/architecture/interface-contracts.md`
 - `docs/architecture/session-consistency.md`
 
-文档按职责而非简单线性排序裁决：V1/V1.1 范围、优先级和验收标准以需求规格为准；组件所有权和依赖方向以总体设计为准；Session 持久化、排序和恢复以会话一致性文档为准；类型、时序和错误码以接口契约为准；任务顺序和提交边界以本主计划和子计划为准。若同一职责内仍冲突，立即停止实现并在同一提交中先修正所有受影响文档；执行者不得通过代码自行改变产品边界。
+Resolve authority by responsibility, not a simple linear ranking: requirements own V1/V1.1 scope, priority, and acceptance criteria; overall design owns component ownership and dependency direction; session consistency owns Session persistence, ordering, and recovery; interface contracts own types, timing, and error codes; this master plan and subplans own task sequence and commit boundaries. If conflicts remain within one responsibility, stop implementation immediately and first correct all affected documents in one commit; implementers must not change product boundaries through code.
 
-## 2. 每个 PR 的开工协议
+## 2. Starting protocol for every PR
 
-- [ ] 创建 PR 分支前确认工作区干净。
+- [ ] Confirm a clean working tree before creating the PR branch.
 
   Run: `git status --short`
 
-  Expected: 无输出。若有输出，只处理属于当前任务的文件；不得覆盖用户修改。
+  Expected: no output. If output exists, handle only files belonging to this task; never overwrite user changes.
 
-- [ ] 核对当前分支包含前序 PR 的提交。
+- [ ] Verify the current branch contains the preceding PR's commits.
 
   Run: `git log --oneline --decorate -8`
 
-  Expected: PR-A 从文档基线开始；PR-B 包含 PR-A；PR-C 包含 PR-B。
+  Expected: PR-A starts from the documentation baseline; PR-B contains PR-A; PR-C contains PR-B.
 
-- [ ] 重读当前 PR 子计划列出的上游源文件，并记录实际 hash。
+- [ ] Reread upstream source files listed in the current PR subplan and record actual hashes.
 
   Run:
 
@@ -89,63 +91,63 @@
   git -C E:\AI\_reference\codex rev-parse HEAD
   ```
 
-  Expected: 与“固定输入”完全相同。若不同，切回固定提交；不得顺便升级。
+  Expected: exact match with fixed inputs. Otherwise return to the pinned commits; do not upgrade incidentally.
 
-- [ ] 当前 PR 若创建 workspace package，先重读固定 DSH `docs/cookbook/adding-a-package.md`；创建 Client package 时再重读 `packages/client/AGENTS.md`。每个 `@local-harness/*` 包都必须使用 `0.1.5-alpha.2`、private ESM、标准 exports、README/README.i18n、`tsconfig.base.json` 精确 alias，并且只加入 `tsconfig.host.json` 或 `tsconfig.client.json` 一个 aggregate。运行 `pnpm run doc-sync`，提交生成的配对 README；不得等到 PR 末尾才修 project reference。
+- [ ] If creating a workspace package, first reread pinned DSH `docs/cookbook/adding-a-package.md`; for a Client package also reread `packages/client/AGENTS.md`. Every `@local-harness/*` package must use `0.1.5-alpha.2`, private ESM, standard exports, README/README.i18n, an exact `tsconfig.base.json` alias, and membership in only one aggregate: `tsconfig.host.json` or `tsconfig.client.json`. Run `pnpm run doc-sync` and commit generated paired READMEs; do not postpone project-reference fixes until the end of the PR.
 
-- [ ] 运行子计划指定的开工基线测试并保存命令与结果到 PR 描述。
+- [ ] Run the subplan's starting baseline tests and retain commands/results in the PR description.
 
-- [ ] 使用测试驱动：每项行为先加入失败测试，确认失败原因正确，再写最小实现。
+- [ ] Use test-driven development: first add a failing test for each behavior, confirm its failure reason, then implement the minimum change.
 
-- [ ] 每完成一个独立行为提交一次；提交消息使用子计划给出的文本。
+- [ ] Commit after completing each independent behavior, using the subplan's commit message.
 
-## 3. GitHub 协作协议
+## 3. GitHub collaboration protocol
 
-当前本地仓库没有 `origin`。首次云端推送前，项目所有者需要在 GitHub 创建空仓库 `Local-Harness-pi` 并把其 URL 配置为 `origin`；执行者不得代替所有者猜测账号、组织或公开性。
+The current local repository has no `origin`. Before the first cloud push, the project owner must create an empty GitHub repository named `Local-Harness-pi` and configure its URL as `origin`; implementers must not guess the account, organization, or visibility on the owner's behalf.
 
-- [ ] 在首次 push 前验证远端身份。
+- [ ] Verify remote identity before the first push.
 
   Run: `git remote -v`
 
-  Expected: 只有经项目所有者确认的 `origin`；URL 末尾仓库名为 `Local-Harness-pi`。
+  Expected: only the owner-confirmed `origin`; the URL ends in repository name `Local-Harness-pi`.
 
-- [ ] 使用普通 push 发布分支，不自动 force-push。
+- [ ] Publish branches with ordinary push, without automatic force-push.
 
   Run: `git push -u origin HEAD`
 
-- [ ] 每个云端检查点创建 Draft PR；PR 标题固定如下：
+- [ ] Create a Draft PR for every cloud checkpoint with these fixed titles:
 
   - `feat: establish the Local-Harness-pi DSH baseline`
   - `feat: replace the DSH loop with the Pi kernel driver`
   - `feat: complete the Local-Harness-pi V1 desktop flow`
 
-- [ ] PR 描述必须含：三项上游 hash、需求 ID、实际测试命令与结果、已知风险、回滚方式、未实现的 V1.1 内容。
+- [ ] PR descriptions must include all three upstream hashes, requirement IDs, actual test commands/results, known risks, rollback, and unimplemented V1.1 content.
 
-- [ ] AI 可以自主推送新增提交并更新 Draft PR，但不得自行点击 merge、关闭失败检查或更改仓库可见性。
+- [ ] AI may independently push additional commits and update Draft PRs, but must not merge, disable failing checks, or change repository visibility.
 
-## 4. 三个可观察检查点
+## 4. Three observable checkpoints
 
-### 检查点 A：产品平台可构建
+### Checkpoint A: Buildable product platform
 
-完成 PR-A 后，用户能在 GitHub 看到完整 DSH 基线、来源声明、Local-Harness-pi 品牌、安全 Electron 窗口配置及隔离的数据目录。此时仍使用 DSH 原 Agent Loop，仅用于证明平台基线健康。
+After PR-A, users can see the complete DSH baseline, provenance, Local-Harness-pi branding, secure Electron window configuration, and isolated data directories on GitHub. The original DSH Agent Loop still runs; this proves platform baseline health only.
 
-阻断条件：来源不明、上游 hash 不一致、Electron 隔离设置回退、桌面数据写入共享 `~/.dsh`、基线测试失败。
+Blockers: unknown provenance, mismatched upstream hashes, weakened Electron isolation, desktop data written to shared `~/.dsh`, or failing baseline tests.
 
-### 检查点 B / M0 Kernel Integration：Pi 成为唯一 Loop Engine
+### Checkpoint B / M0 Kernel Integration: Pi becomes the sole Loop Engine
 
-完成 PR-B 后，默认组合恰好注册一个 `AgentFactory`：`PiAgentLoop` 继承 DSH `AgentLoop` lifecycle，只通过 machine seam 由 Pi Agent Core 驱动 conversational tool-loop；模型、工具和所有 durable event 仍走 DSH 服务。恢复只读 DSH Session，工具副作用前和 turn 完成前都有 flush barrier。M0 是 PR-C 的正式 go/no-go，不是对外发布版本。
+After PR-B, default composition registers exactly one `AgentFactory`: `PiAgentLoop` inherits the DSH `AgentLoop` lifecycle and drives the conversational tool-loop through Pi Agent Core only via the machine seam; models, tools, and all durable events still use DSH services. Recovery reads only DSH Session, with flush barriers before tool side effects and turn completion. M0 is the formal PR-C go/no-go, not an external release.
 
-阻断条件：生产依赖含 Pi Harness Session/Skills/Compaction、Pi 复制或重新实现 AgentFactory lifecycle、base 激活第二个 factory、Pi 直接执行工具或读模型 key、UI 读取 Pi event、存在第二份 transcript、并行工具按完成顺序写 Session、flush 失败仍返回成功。M0 不接纳 Tool Effect Taxonomy、Evidence/Critic store、通用 agent graph 或多 Agent 编排。
+Blockers: production dependencies include Pi Harness Session/Skills/Compaction; Pi copies or reimplements AgentFactory lifecycle; base activates a second factory; Pi directly executes tools or reads model keys; UI reads Pi events; a second transcript exists; parallel tools write Session in completion order; or flush failure still returns success. M0 excludes Tool Effect Taxonomy, Evidence/Critic stores, general agent graphs, and multi-Agent orchestration.
 
-### 检查点 C：V1 可交付
+### Checkpoint C: Deliverable V1
 
-完成 PR-C 后，本地/云端 OpenAI-compatible route、首次启动、设置页、Composer “+”菜单、Goal/Plan/Skill、GUI-managed MCP、会话资料库、Diff/Terminal、附件/PDF、审批、恢复和 Windows 打包形成产品闭环。
+After PR-C, local/cloud OpenAI-compatible routes, first launch, settings, Composer '+' menu, Goal/Plan/Skill, GUI-managed MCP, session library, Diff/Terminal, attachments/PDF, approval, recovery, and Windows packaging form a complete product workflow.
 
-阻断条件：云 route 允许 HTTP、本地 route 可访问非 loopback、凭据进入设置 JSON/日志/Session、MCP 配置存在 Client/Pi 副本、CAS 冲突被覆盖、一个 MCP 失败拖垮其他工具、会话整理或 Compaction 回归、自动安装更新默认开启、Windows 安装包 smoke 失败。
+Blockers: cloud routes allow HTTP; local routes access non-loopback addresses; credentials enter settings JSON/logs/Session; Client/Pi holds MCP configuration copies; CAS conflicts are overwritten; one MCP failure breaks other tools; session organization or Compaction regresses; automatic update installation defaults on; or Windows installer smoke fails.
 
-## 5. 全局发布门禁
+## 5. Global release gates
 
-- [ ] 依赖与架构门禁。
+- [ ] Dependency and architecture gates.
 
   Run:
 
@@ -159,15 +161,15 @@
   pnpm run test:docs
   ```
 
-  Expected: 全部退出码为 0。
+  Expected: every exit code is 0.
 
-- [ ] 执行完整 unit/contract suite。
+- [ ] Run the complete unit/contract suite.
 
   Run: `pnpm run test`
 
-  Expected: 全部通过；真实 API 用例只可按 DSH 既有策略在无密钥时自跳过。
+  Expected: all pass; real-API cases may self-skip without keys only under existing DSH policy.
 
-- [ ] 执行 keyless Session replay 与 Web E2E。
+- [ ] Run keyless Session replay and Web E2E.
 
   Run:
 
@@ -177,9 +179,9 @@
   pnpm run test:gui
   ```
 
-  Expected: 全部通过，不出现重复 assistant 消息或旧 session transient frame。
+  Expected: all pass without duplicate assistant messages or old-session transient frames.
 
-- [ ] 执行 Windows 桌面目录打包和未签名 NSIS 安装包。
+- [ ] Build the Windows unpacked desktop and unsigned NSIS installer.
 
   Run:
 
@@ -189,67 +191,67 @@
   pnpm --filter @deepseek-ai/dsh-desktop run package:win:x64
   ```
 
-  Expected: 生成可启动的 unpacked Windows 应用和可手工安装的未签名 NSIS Alpha；签名、自动安装与回滚不是 V1 门禁。
+  Expected: a launchable unpacked Windows app and manually installable unsigned NSIS Alpha; signing, automatic installation, and rollback are not V1 gates.
 
-- [ ] 运行手工模型矩阵并在 release evidence 中记录，不提交密钥。
+- [ ] Run the manual model matrix and record it in release evidence without committing keys.
 
-  1. 本地 OpenAI Chat Completions：文本、工具、取消。
-  2. 本地 OpenAI Responses：文本、工具、取消。
-  3. 一个 loopback 实际服务。
-  4. 一个 HTTPS OpenAI-compatible 云 route。
+  1. Local OpenAI Chat Completions: text, tools, cancellation.
+  2. Local OpenAI Responses: text, tools, cancellation.
+  3. One actual loopback service.
+  4. One HTTPS OpenAI-compatible cloud route.
 
-- [ ] 运行崩溃恢复矩阵：用户消息确认后 kill、assistant stream 中 kill、`tool/call` flush 后 body 前 kill、body 后 result 前 kill、turn end 后 kill、Compaction generation commit 前/后 kill、context-overflow compaction 后重试前 kill、SQLite 索引移除后重建。
+- [ ] Run the crash-recovery matrix: kill after user-message acknowledgement, during assistant streaming, after `tool/call` flush before body, after body before result, after turn end, before/after Compaction generation commit, after context-overflow compaction before retry, and rebuild after SQLite index removal.
 
-- [ ] 运行产品完整性矩阵：首次模型 onboarding、会话重命名/搜索/归档/恢复/分叉/导出、Diff/Terminal、About/离线许可、MCP stdio/HTTP create-disable-enable-edit-conflict-reconnect-remove。MCP secret marker 不得出现在 DOM、Remote snapshot、Session 或日志；一个 MCP failure 不得移除兄弟 MCP 或 builtin tools。
+- [ ] Run the product-completeness matrix: initial model onboarding; session rename/search/archive/restore/fork/export; Diff/Terminal; About/offline licenses; MCP stdio/HTTP create-disable-enable-edit-conflict-reconnect-remove. MCP secret markers must not appear in DOM, Remote snapshots, Session, or logs; one MCP failure must not remove sibling MCP or built-in tools.
 
-- [ ] 运行 NFR-020 四项性能门禁：冷启动、Host delta 到 DOM 附加延迟、Electron + Host 进程树空闲内存、1000 会话列表加载；使用 C9 固定脚本与同一硬件/fixture，保留原始样本。
+- [ ] Run all four NFR-020 performance gates: cold start, additional Host-delta-to-DOM latency, idle Electron + Host process-tree memory, and listing 1000 sessions. Use C9's fixed scripts and identical hardware/fixtures, retaining raw samples.
 
-- [ ] 确认没有 V1.1 越界内容。
+- [ ] Confirm no V1.1 scope violations.
 
   Run: `git grep -n -E "playwright|computer.use|office.edit|pdf.edit|autoDownload|autoInstall" -- packages apps`
 
-  Expected: 仅出现 DSH 既有测试/依赖或明确关闭的配置；不得出现本项目新增的 V1.1 实现。
+  Expected: only existing DSH tests/dependencies or explicitly disabled configuration; no new V1.1 implementation from this project.
 
-## 6. 时间与额度控制
+## 6. Time and quota control
 
-### 6.1 估算口径
+### 6.1 Estimation assumptions
 
-以下估算假定：一个主要 Codex 串行实现，另一个 Codex 只在每个 Draft PR 检查点独立复审；每周 5 个工作日、每天约 4–6 小时有效工程时间；固定上游版本不升级；本地与云端 smoke 所需 endpoint 在发布阶段可用。等待用户审阅、Plus 周额度重置、真实模型服务故障和 GitHub 故障只增加日历时间，不计入净工作日。
+Estimates assume one main Codex implementing serially and another Codex independently reviewing only at each Draft PR checkpoint; five working days per week with roughly 4–6 effective engineering hours per day; no pinned-upstream upgrades; and endpoints for local/cloud smoke tests available at release time. Waiting for user review, Plus weekly-quota resets, real-model service failures, or GitHub failures increases calendar time but not net working days.
 
-“一个 GPT-5.6 Sol Plus 完整周额度”是相对容量单位，不假定永久固定的请求数。执行者在每个 PR 开始和长测试矩阵前读取当时账户用量；不得为了适配额度删除 P0 测试。
+A full GPT-5.6 Sol Plus weekly quota is a relative capacity unit, not a permanently fixed request count. Implementers read current account usage at each PR's start and before long test matrices; do not remove P0 tests to fit quotas.
 
-### 6.2 分段净工作量
+### 6.2 Net effort by phase
 
-- PR-A：5–6 个工作日，约 0.7–1.0 个完整周额度。内容为源码导入、来源锁、完整产品/Web/模型身份、About/许可、数据隔离、Electron 安全和行为中性的 Agent machine seam。
-- PR-B：7–10 个工作日，约 1.2–1.8 个完整周额度。内容为 typed conversational KernelDriver、模型/工具桥、durability、继承式 Pi machine、恢复和 DSH Compaction 兼容；这是关键路径。
-- PR-C：7–9 个工作日，约 1.0–1.4 个完整周额度。内容为共享 guarded-fetch、OpenAI route/onboarding、GUI-managed MCP、设置/Plus 菜单、会话/Diff/Terminal 回归、更新和 Desktop E2E。
-- `main` 稳定化与发布：3–4 个工作日，约 0.3–0.5 个完整周额度。只修复已发现缺陷、重跑矩阵和制作 release evidence，不增加功能。
+- PR-A: 5–6 working days, roughly 0.7–1.0 full weekly quotas. Source import, provenance locks, complete product/Web/model identity, About/licenses, data isolation, Electron security, and behavior-neutral Agent machine seam.
+- PR-B: 7–10 working days, roughly 1.2–1.8 full weekly quotas. Typed conversational KernelDriver, model/tool bridges, durability, inherited Pi machine, recovery, and DSH Compaction compatibility; this is the critical path.
+- PR-C: 7–9 working days, roughly 1.0–1.4 full weekly quotas. Shared guarded-fetch, OpenAI route/onboarding, GUI-managed MCP, settings/Plus menu, session/Diff/Terminal regression, updates, and Desktop E2E.
+- `main` stabilization and release: 3–4 working days, roughly 0.3–0.5 full weekly quotas. Fix discovered defects, rerun matrices, and prepare release evidence only; add no features.
 
-总计为 22–29 个净工作日、约 3.2–4.7 个完整周额度。常规基准取 25 个工作日、约 5 个日历周和 3.9 个完整周额度；乐观也按 5 周安排，保守预留第 6 周。
+Total: 22–29 net working days and roughly 3.2–4.7 full weekly quotas. The normal baseline is 25 working days, approximately five calendar weeks and 3.9 full weekly quotas; even optimistic scheduling uses five weeks, with a conservative sixth week reserved.
 
-### 6.3 建议周历
+### 6.3 Suggested weekly schedule
 
-- 第 1 周：完成 PR-A。第 5–6 个工作日形成检查点 A；若提前全绿，剩余额度只用于 B1–B2 的源码复读和失败测试，不抢跑 UI。
-- 第 2 周：完成 B3–B6，即消息/context、模型、工具和 Session commit bridge。
-- 第 3 周：完成 B7–B10、crash/compaction matrix 和 M0。PR-B/M0 未通过前不得开始依赖真实 Pi 语义的 PR-C 代码。
-- 第 4 周：完成 C1–C4，即共享 guarded-fetch、模型 onboarding、能力 inventory、Host MCP 和 MCP/UI settings。
-- 第 5 周：完成 C5–C9、检查点 C，并在 `main` 运行第一次全量门禁。
-- 第 6 周（保守余量）：只处理跨包类型生成、Windows 打包、MCP 进程清理、性能门禁或独立复审发现的问题；没有缺陷时不消耗该周。
+- Week 1: finish PR-A. Reach checkpoint A on working day 5–6; if everything passes early, use remaining quota only for B1–B2 source rereading and failing tests, without starting UI early.
+- Week 2: complete B3–B6, covering messages/context, models, tools, and Session commit bridge.
+- Week 3: complete B7–B10, crash/compaction matrix, and M0. Do not start PR-C code depending on real Pi semantics before PR-B/M0 passes.
+- Week 4: complete C1–C4: shared guarded-fetch, model onboarding, capability inventory, Host MCP, and MCP/UI settings.
+- Week 5: complete C5–C9 and checkpoint C, then run all gates on `main` for the first time.
+- Week 6 (conservative buffer): handle only cross-package type generation, Windows packaging, MCP process cleanup, performance gates, or independently reviewed defects; do not consume this week without defects.
 
-### 6.4 额度与延期规则
+### 6.4 Quota and deferral rules
 
-- 每个周额度优先级固定为：Session/durability/恢复 > Pi 工具与模型闭环 > MCP credential/CAS/隔离 > OpenAI route > Desktop E2E > 视觉微调。
-- 当前周期剩余额度不足以完成一个任务的“失败测试 -> 实现 -> 完整验证 -> commit”时，不开始该任务；改做源码复读、review、文档核对或已实现任务的聚焦测试，并在额度重置后从任务边界继续。
-- 当前基线没有已批准的 P1 延期；需求文档列出的全部 P1 都要实施和验收。若项目所有者以后明确批准缩减，只能先更新需求、追踪矩阵和对应 PR 计划；FR-004、FR-017、FR-019、FR-066、FR-067 以及所有 P0 测试在任何情况下都不能作为赶工项删除。
-- 连续两天无代码进展时先分类：额度等待不改计划；固定上游测试失败进入稳定化预算；接口理解不一致必须回到权威文档，不允许实现者自行选择新架构。
+- Weekly priority is fixed: Session/durability/recovery > Pi tool/model workflow > MCP credential/CAS/isolation > OpenAI route > Desktop E2E > visual refinement.
+- If the current quota cannot cover one task's failing test -> implementation -> complete verification -> commit, do not start it. Instead reread source, review, verify documents, or run focused tests for implemented tasks, resuming from task boundaries after reset.
+- The current baseline approves no P1 deferrals; all P1 requirements listed in the requirements document must be implemented and accepted. Later explicit owner-approved reductions first update requirements, traceability, and corresponding PR plans; FR-004, FR-017, FR-019, FR-066, FR-067, and all P0 tests can never be dropped to meet a deadline.
+- After two consecutive days without code progress, classify the cause: quota waiting does not change the plan; pinned-upstream test failures use stabilization allowance; interface disagreements return to authoritative documents, never an implementer's unilateral new architecture.
 
-## 7. 完成定义
+## 7. Definition of completion
 
-只有同时满足下列条件才可把 V1 标记为完成：
+V1 may be marked complete only when all conditions hold:
 
-- [ ] 三个 PR 均经人工审阅并合入 `main`。
-- [ ] `main` 上重新运行第 5 节门禁并记录 commit hash。
-- [ ] Windows 11 x64 干净环境完成安装、首次模型配置、一次含 Diff/Terminal 的工具任务、MCP 配置与调用、会话整理/搜索/导出、退出恢复和卸载。
-- [ ] 发布说明清楚列出 V1.1 排除项与已知限制。
-- [ ] GitHub Release 只提供手动下载；Alpha 不自动下载、不自动安装。
-- [ ] README 状态更新为 V1 已实现，并链接 release evidence。
+- [ ] All three PRs have human review and are merged into `main`.
+- [ ] Section 5 gates rerun on `main` with a recorded commit hash.
+- [ ] A clean Windows 11 x64 environment completes installation, initial model configuration, one tool task with Diff/Terminal, MCP configuration/call, session organization/search/export, exit/recovery, and uninstallation.
+- [ ] Release notes clearly list V1.1 exclusions and known limitations.
+- [ ] GitHub Release provides manual downloads only; Alpha never downloads or installs automatically.
+- [ ] README marks V1 implemented and links release evidence.

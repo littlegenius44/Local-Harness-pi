@@ -2,6 +2,8 @@
 
 English | [中文](2026-09-10-local-harness-pi-pr-a-dsh-baseline.zh.md)
 
+Fences marked `ts design` are planned implementation excerpts checked for syntax only, not available APIs. Their omitted host dependencies must be wired and pass source typechecking and contract tests in the owning implementation task.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Import the pinned DSH snapshot into the new repository, retain provenance and internal compatibility identifiers, establish Local-Harness-pi product branding, offline About/third-party licenses, Windows data isolation, and the Electron security baseline, extract a behavior-neutral Agent machine construction seam, and prove the platform builds and runs before Pi integration.
@@ -18,7 +20,7 @@ Read fully before starting:
 
 - DSH: root `AGENTS.md`, `BRAND_GUIDELINES.md`, `docs/architecture.md`, `docs/defensive-patterns.md`, `docs/cookbook/adding-a-package.md`, `scripts/check-workspace-constraints.ts`, and `scripts/client-build-environment.ts`; `apps/desktop/src/main.ts`, `host-process.ts`, `paths.ts`, `ipc.ts`, `preload.ts`, `project-manager.ts`, `update-coordinator.ts`, `electron-builder.config.mjs`, and corresponding `apps/desktop/tests/*.spec.ts`; branding, welcome, and system-prompt implementations and tests in `apps/web/public/manifest.webmanifest`, `apps/web/index.html`, `packages/client/ui-brand-official`, `packages/client/ui-settings-models`, and `packages/bundle/web-app`; `packages/core/agent-loop/src/index.ts`, `agent.ts`, all lifecycle tests, and `packages/core/agent/src/types.ts` and `runtime-types.ts`.
 - Codex: desktop security, settings, and Composer entry implementations; reference only interaction and security principles, without copying Apache-2.0 code.
-- Pi: this PR does not integrate runtime code; verify only the license and version in `packages/agent/package.json`.
+- Pi: this PR does not integrate runtime code; verify only the license and version in `agent/package.json` under Pi's `packages` directory.
 
 ## Task A1: Import the pinned DSH source snapshot
 
@@ -253,7 +255,7 @@ Read fully before starting:
 
 - [ ] First write product identity tests asserting that builder configuration contains:
 
-  ```ts
+  ```ts design
   expect(config.productName).toBe('Local-Harness-pi')
   expect(config.artifactName).toBe('local-harness-pi-${version}-${os}-${arch}.${ext}')
   expect(config.appId).toBe('io.localharness.pi')
@@ -314,7 +316,7 @@ Read fully before starting:
 
   To avoid a workspace-wide version rewrite without product value, V1 Alpha inherits the pinned DSH baseline's already-consistent `0.1.5-alpha.2`. This package is a private `@local-harness/*` workspace member outside the DSH npm release family; the A2 Local verifier independently enforces root-version equality and prohibits publication.
 
-  ```ts
+  ```ts design
   export const productIdentity = Object.freeze({
     name: 'Local-Harness-pi',
     version: '0.1.5-alpha.2',
@@ -378,15 +380,17 @@ Read fully before starting:
 
 - [ ] Compute the root path only once in `main.ts`:
 
-  ```ts
+  ```ts design
   const harnessHome = join(app.getPath('userData'), 'harness')
   const paths = resolveDesktopPaths(harnessHome)
   ```
 
   Add `harnessHome: string` to the `DesktopHostProcess` constructor and add to the spawn environment:
 
-  ```ts
-  DSH_HOME: this.harnessHome,
+  ```ts design
+  const environment = {
+    DSH_HOME: this.harnessHome,
+  }
   ```
 
   Pass the same `harnessHome` to every active and health-check path in `startHost()`. Do not accept this path from the renderer or settings.
@@ -416,7 +420,7 @@ Read fully before starting:
 
 - [ ] First write failing tests covering the main and plugin windows:
 
-  ```ts
+  ```ts design
   expect(options.webPreferences).toMatchObject({
     nodeIntegration: false,
     contextIsolation: true,
@@ -434,7 +438,7 @@ Read fully before starting:
 
 - [ ] Extract existing BrowserWindow options unchanged into a pure function:
 
-  ```ts
+  ```ts design
   export function desktopWindowOptions(preload: string): BrowserWindowConstructorOptions {
     return {
       width: 1280,
