@@ -1,6 +1,13 @@
 /** Lossless in-memory projection from durable DSH messages to loop messages. */
 
-import type { ContentBlock, Message } from '@deepseek-ai/dsh-llm'
+import {
+  createAssistantMessage,
+  createUserMessage,
+  freezeMessage,
+  type ContentBlock,
+  type Message,
+  type MessageId,
+} from '@deepseek-ai/dsh-llm'
 import type {
   AssistantMessage,
   Message as PiMessage,
@@ -10,6 +17,7 @@ import type {
   UserMessage,
 } from '@earendil-works/pi-ai'
 import { KernelBoundaryError } from './kernel-driver.ts'
+import type { FrozenModelSelection } from './kernel-driver.ts'
 
 const DSH_MESSAGE = Symbol('local-harness.dsh-message')
 
@@ -180,4 +188,48 @@ export function piToolCalls(message: PiMessage): readonly ToolCall[] {
   return message.role === 'assistant'
     ? message.content.filter((block): block is ToolCall => block.type === 'toolCall')
     : []
+}
+
+function fromAssistantContent(content: AssistantMessage['content']): ContentBlock[] {
+  return content.map((block): ContentBlock => {
+    switch (block.type) {
+      case 'text': return { type: 'text', text: block.text }
+      case 'thinking': return { type: 'reasoning', text: block.thinking }
+      case 'toolCall': return {
+        type: 'tool-call',
+        id: block.id as never,
+        name: block.name,
+        arguments: JSON.stringify(block.arguments),
+      }
+      default: throw conversionError(`unsupported assistant loop block: ${String((block as { type?: unknown }).type)}`)
+    }
+  })
+}
+
+/** Convert a loop artifact back to a DSH message at the event boundary. */
+export function fromPiMessage(
+  message: PiMessage,
+  model: FrozenModelSelection,
+  identity?: MessageId,
+): Message {
+  const traced = dshMessageOf(message)
+  if (traced !== undefined) return traced
+  if (message.role === 'assistant') {
+    const fresh = createAssistantMessage({
+      content: fromAssistantContent(message.content),
+      source: { provider: model.provider, model: model.model },
+    })
+    if (identity === undefined) return fresh
+    return freezeMessage({ ...fresh, id: identity })
+  }
+  if (message.role === 'user') {
+    const content = typeof message.content === 'string'
+      ? [{ type: 'text' as const, text: message.content }]
+      : message.content.map((block): ContentBlock => {
+        if (block.type === 'text') return { type: 'text', text: block.text }
+        throw conversionError('untraced loop images cannot be restored to DSH attachments')
+      })
+    return createUserMessage({ content, source: { kind: 'plugin', plugin: '@local-harness/pi-agent-loop' } })
+  }
+  throw conversionError('untraced tool-result messages require the DSH tool bridge')
 }

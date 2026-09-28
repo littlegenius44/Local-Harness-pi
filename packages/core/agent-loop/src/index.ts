@@ -36,6 +36,10 @@ import type { Scope } from '@deepseek-ai/dsh-scope'
 import { ReactLoopAgent } from './agent.ts'
 import { DEFAULT_MAX_PARALLEL_TOOL_CALLS } from './constants.ts'
 
+export { AssistantStreamAttempt } from './assistant-stream.ts'
+export { ReactLoopInbox } from './inbox.ts'
+export { RuntimeContextProjection, SystemPromptProjection } from './runtime-context.ts'
+
 /** Fiber states that cannot own or serve a new lifecycle. */
 const INACTIVE_STATES: ReadonlySet<FiberState> = new Set([
   FiberState.UNLOADING,

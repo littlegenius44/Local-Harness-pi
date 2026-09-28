@@ -10,7 +10,15 @@ import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
-import AgentLoop, { type AgentLoopMachine, type AgentMachineCreateInput, type Config } from '../src/index.ts'
+import AgentLoop, {
+  AssistantStreamAttempt,
+  ReactLoopInbox,
+  RuntimeContextProjection,
+  SystemPromptProjection,
+  type AgentLoopMachine,
+  type AgentMachineCreateInput,
+  type Config,
+} from '../src/index.ts'
 import { ReactLoopAgent } from '../src/agent.ts'
 
 const cleanup: Array<() => Promise<void>> = []
@@ -46,6 +54,15 @@ async function harness(fail = false, useDefault = false, config: Config = { agen
 }
 
 describe('AgentLoop machine construction', () => {
+  it('root-exports the reusable React-loop components without changing the default machine', () => {
+    expect([
+      AssistantStreamAttempt,
+      ReactLoopInbox,
+      RuntimeContextProjection,
+      SystemPromptProjection,
+    ].every(value => typeof value === 'function')).toBe(true)
+  })
+
   it('keeps the default React machine', async () => {
     const { ctx } = await harness(false, true)
     const handle = await ctx.agents.create({ sessionId: SessionId('default') })

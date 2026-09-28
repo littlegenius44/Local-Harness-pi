@@ -155,6 +155,12 @@ git commit -m "feat: add minimal pi kernel boundary"
 - Create：`packages/core/agent-loop-pi/src/event-bridge.ts`
 - Create：`packages/core/agent-loop-pi/src/pi-agent.ts`
 - Create：`packages/core/agent-loop-pi/tests/pi-agent.spec.ts`
+- Modify：`packages/core/agent-loop-pi/src/message-conversion.ts`
+- Modify：`packages/core/agent-loop-pi/src/model-bridge.ts`
+- Modify：`packages/core/agent-loop-pi/package.json`
+- Modify：`packages/core/agent-loop-pi/tsconfig.json`
+- Modify：`pnpm-lock.yaml`
+- Modify：`packages/core/agent-loop/src/assistant-stream.ts`（仅为新根导出的方法补齐 JSDoc）
 - Modify：`packages/core/agent-loop/src/index.ts`
 - Modify：`packages/core/agent-loop/tests/agent-machine-seam.spec.ts`
 
@@ -231,7 +237,7 @@ corepack pnpm exec tsc -p packages/core/agent-loop-pi/tsconfig.json --noEmit
 预期：PASS，原 React machine-seam regression 保持通过。
 
 ```powershell
-git add packages/core/agent-loop/src/index.ts packages/core/agent-loop/tests/agent-machine-seam.spec.ts packages/core/agent-loop-pi/src/pi-kernel-driver.ts packages/core/agent-loop-pi/src/event-bridge.ts packages/core/agent-loop-pi/src/pi-agent.ts packages/core/agent-loop-pi/tests/pi-agent.spec.ts
+git add packages/core/agent-loop/src/index.ts packages/core/agent-loop/src/assistant-stream.ts packages/core/agent-loop/tests/agent-machine-seam.spec.ts packages/core/agent-loop-pi pnpm-lock.yaml
 git commit -m "feat: drive dsh turns with pi core"
 ```
 

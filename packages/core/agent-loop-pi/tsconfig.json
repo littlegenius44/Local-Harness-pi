@@ -28,6 +28,18 @@
     },
     {
       "path": "../../core/agent"
+    },
+    {
+      "path": "../../core/agent-loop"
+    },
+    {
+      "path": "../../core/scope"
+    },
+    {
+      "path": "../../session/session-projection"
+    },
+    {
+      "path": "../../core/system-prompt"
     }
   ]
 }

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/superpowers/plans/2026-09-27-local-harness-pi-pr-b-minimal-serial.md
-2026-09-27-local-harness-pi-pr-b-minimal-serial.md: d0b6d616788aacee98a60156a8e7fa292cd4c75e
-2026-09-27-local-harness-pi-pr-b-minimal-serial.zh.md: 7b0f699acc93f121072b76ff3386a5be7a3be255
+2026-09-27-local-harness-pi-pr-b-minimal-serial.md: 081aa7526f03ccb625557c81656a602c567c5d79
+2026-09-27-local-harness-pi-pr-b-minimal-serial.zh.md: 8773ad76480fd120a056e4ed68724781e3bb0507
