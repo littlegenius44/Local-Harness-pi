@@ -318,7 +318,10 @@ export class SessionCommandController {
       )
     }
     const agent = await this.resolveAgent(request.sessionId)
-    if (hasPromptRequest(agent, request.requestId)) return { accepted: true }
+    if (hasPromptRequest(agent, request.requestId)) {
+      await this.ctx.sessions.flush(agent.session)
+      return { accepted: true }
+    }
     const selection = this.agents.selectionFor(agent).current
     if (!routeServed(this.ctx, selection.provider)) {
       throw new RemoteError(
@@ -370,6 +373,7 @@ export class SessionCommandController {
         }
         throw new RemoteError('session/agent-busy', 'prompt rejected', { reason: String(error) })
       }
+      await this.ctx.sessions.flush(agent.session)
       return { accepted: true }
     }
     return hasImage ? this.agents.serializeImageAdmission(agent, admit) : admit()

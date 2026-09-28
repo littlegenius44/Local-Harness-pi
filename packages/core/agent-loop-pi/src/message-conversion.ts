@@ -2,6 +2,7 @@
 
 import {
   createAssistantMessage,
+  createToolResultMessage,
   createUserMessage,
   freezeMessage,
   type ContentBlock,
@@ -231,5 +232,15 @@ export function fromPiMessage(
       })
     return createUserMessage({ content, source: { kind: 'plugin', plugin: '@local-harness/pi-agent-loop' } })
   }
-  throw conversionError('untraced tool-result messages require the DSH tool bridge')
+  const content = message.content.map((block): ContentBlock => {
+    if (block.type === 'text') return { type: 'text', text: block.text }
+    throw conversionError('untraced tool-result images are not supported by the V1 bridge')
+  })
+  const fresh = createToolResultMessage({
+    callId: message.toolCallId as never,
+    content,
+    isError: message.isError,
+  })
+  if (identity === undefined) return fresh
+  return freezeMessage({ ...fresh, id: identity })
 }

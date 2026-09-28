@@ -27,6 +27,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { AgentContext } from '@earendil-works/pi-agent-core'
 import type { AssistantMessageEvent } from '@earendil-works/pi-ai'
 import type { KernelRunInput } from './kernel-driver.ts'
+import { DshToolBridge } from './tool-bridge.ts'
 import { toPiAssistantEvents } from './stream-conversion.ts'
 import type {
   FrozenModelSelection,
@@ -82,6 +83,8 @@ interface ResolvedStep {
 
 /** DSH-native step preparation and model streaming used by the production Pi machine. */
 export class DshStepRuntime implements StepPreparer, DshModelStreamBridge {
+  /** Shared serial tool bridge used by Pi callbacks and durable event commits. */
+  readonly tools: DshToolBridge
   private readonly dispatch: AgentEventDispatch
   private readonly runtimeContext: RuntimeContextProjection
   private readonly resolved = new WeakMap<PreparedKernelStep, ResolvedStep>()
@@ -97,10 +100,17 @@ export class DshStepRuntime implements StepPreparer, DshModelStreamBridge {
     private readonly loopCtx: Context,
     private readonly agent: DshAgent,
     private readonly session: Session,
+    tools?: DshToolBridge,
   ) {
     this.dispatch = agentEvents(loopCtx, agent)
     this.runtimeContext = new RuntimeContextProjection(agent.ctx, session)
+    this.tools = tools ?? new DshToolBridge(loopCtx, agent)
     this.requestSurfaceGeneration = session.surface.replaceGeneration
+  }
+
+  /** Pi coordinator callback that delegates to the public DSH tool pipeline. */
+  executeTool(...args: Parameters<DshToolBridge['execute']>): ReturnType<DshToolBridge['execute']> {
+    return this.tools.execute(...args)
   }
 
   async prepare(

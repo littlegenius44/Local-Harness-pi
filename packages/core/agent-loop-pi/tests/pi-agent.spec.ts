@@ -7,14 +7,16 @@ import AgentLoop, {
 } from '@deepseek-ai/dsh-agent-loop'
 import LlmRuntime, {
   createAssistantMessage,
+  createToolResultMessage,
   createUserMessage,
+  ToolCallId,
   type UserMessage,
 } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime from '@deepseek-ai/dsh-tools'
-import { afterEach, describe, expect, it } from 'vitest'
+import ToolRuntime, { defineTool } from '@deepseek-ai/dsh-tools'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { KernelEventOrderSink } from '../src/event-bridge.ts'
 import {
   RunId,
@@ -152,10 +154,57 @@ class FakeKernelDriver implements KernelDriver {
   }
 }
 
-async function harness() {
+class FakeToolKernelDriver implements KernelDriver {
+  readonly descriptor = new FakeKernelDriver().descriptor
+
+  start(input: KernelRunInput, sink: KernelEventSink): KernelRun {
+    const local = new AbortController()
+    const signal = AbortSignal.any([input.signal, local.signal])
+    const settled = (async (): Promise<KernelRunResult> => {
+      const position = { turn: input.turn, step: 1 }
+      const callId = ToolCallId('write-1')
+      const assistant = createAssistantMessage({
+        content: [{ type: 'tool-call', id: callId, name: 'write', arguments: '{"value":"x"}' }],
+        source: { provider: model.provider, model: model.model },
+      })
+      await sink.onEvent({ type: 'run.started', runId: input.runId }, signal)
+      await sink.onEvent({ type: 'step.started', position }, signal)
+      for (const message of input.initialMessages) {
+        await sink.onEvent({ type: 'message.started', position, message }, signal)
+        await sink.onEvent({ type: 'message.completed', position, message }, signal)
+      }
+      await sink.onEvent({ type: 'message.started', position, message: assistant }, signal)
+      await sink.onEvent({ type: 'message.completed', position, message: assistant }, signal)
+      await sink.onEvent({
+        type: 'tool.started', position, callId, name: 'write', arguments: { value: 'x' }, sourceIndex: 0,
+      }, signal)
+      await sink.onEvent({
+        type: 'tool.completed', position, callId, sourceIndex: 0,
+        result: { callId, sourceIndex: 0, content: [], isError: false },
+      }, signal)
+      const toolResult = createToolResultMessage({
+        callId,
+        content: [{ type: 'text', text: 'Pi placeholder' }],
+        isError: false,
+      })
+      await sink.onEvent({ type: 'message.started', position, message: toolResult }, signal)
+      await sink.onEvent({ type: 'message.completed', position, message: toolResult }, signal)
+      await sink.onEvent({ type: 'step.completed', position, reason: 'tool-calls' }, signal)
+      await sink.onEvent({ type: 'run.completed', turn: input.turn, reason: { kind: 'completed' } }, signal)
+      return { kind: 'completed' }
+    })()
+    return {
+      runId: input.runId,
+      settled,
+      abort(reason: unknown) { local.abort(reason) },
+    }
+  }
+}
+
+async function harness<Driver extends KernelDriver = FakeKernelDriver>(provided?: Driver) {
   const ctx = new Context()
   cleanup.push(() => ctx.fiber.dispose())
-  const driver = new FakeKernelDriver()
+  const driver = (provided ?? new FakeKernelDriver()) as Driver
   const stepPreparer = new ClaimingPreparer()
   class TestPiLoop extends AgentLoop {
     protected override createMachine(input: AgentMachineCreateInput): AgentLoopMachine {
@@ -178,7 +227,7 @@ async function harness() {
     agentOptions: { provider: model.provider, model: model.model },
   })
   cleanup.push(() => handle.dispose())
-  return { agent: handle.agent, driver, session: handle.agent.session }
+  return { ctx, agent: handle.agent, driver, session: handle.agent.session }
 }
 
 function user(text: string): UserMessage {
@@ -216,6 +265,53 @@ describe('DshPiAgent lifecycle', () => {
     agent.cancel({ kind: 'user' }, { keepInbox: true })
     await agent.whenIdle()
     expect(agent.inbox.nextTurn.map(message => message.id)).toContain(queued.id)
+  })
+
+  it('does not settle idle until the completed turn is flushed', async () => {
+    const { ctx, agent, driver, session } = await harness()
+    const gate = Promise.withResolvers<undefined>()
+    ctx.on('session/flush', () => gate.promise)
+    agent.followup(user('flush me'))
+    await driver.started.promise
+    driver.release.resolve(undefined)
+    await vi.waitFor(() => {
+      expect(session.snapshotEvents().at(-1)?.type).toBe('turn/end')
+    })
+    expect(agent.status).toBe('running')
+    gate.resolve(undefined)
+    await agent.whenIdle()
+    expect(agent.status).toBe('idle')
+  })
+
+  it('commits Pi tool calls and canonical DSH results in source order', async () => {
+    const { ctx, agent, session } = await harness(new FakeToolKernelDriver())
+    ctx.tools.register(defineTool({
+      name: 'write',
+      description: 'fixture write',
+      parameters: { value: { type: 'string', required: true } },
+      output: {
+        schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: value }],
+        presentationMeta: () => ({ card: 'write' }),
+      },
+      async execute(args) { return `saved:${args.value}` },
+    }))
+    agent.followup(user('use the tool'))
+    await agent.whenIdle()
+
+    const events = session.snapshotEvents()
+    const call = events.find(event => event.type === 'tool/call')
+    const result = events.find(event => event.type === 'tool/result')
+    expect(events.map(event => event.type)).toEqual(expect.arrayContaining([
+      'assistant/message', 'tool/call', 'tool/result', 'turn/end',
+    ]))
+    expect(result).toMatchObject({
+      data: {
+        message: { content: [{ type: 'tool-result', content: [{ type: 'text', text: 'saved:x' }] }] },
+        meta: { card: 'write' },
+      },
+      sourceEventSeqs: [call?.seq],
+    })
   })
 })
 

@@ -31,6 +31,7 @@ import {
 } from './kernel-driver.ts'
 import { DshStepRuntime, type PreparedKernelStep, type StepPreparer } from './model-bridge.ts'
 import { PiKernelDriver } from './pi-kernel-driver.ts'
+import { DshToolBridge } from './tool-bridge.ts'
 
 type Phase =
   | { kind: 'idle'; lastTurn: number }
@@ -43,6 +44,8 @@ export interface DshPiAgentDependencies {
   readonly stepPreparer: StepPreparer
   /** Resolve later steps prepared inside the active Pi run. */
   readonly stepAt?: (position: { turn: number; step: number }) => PreparedKernelStep | undefined
+  /** Serial tool commit bridge paired with the driver coordinator. */
+  readonly toolBridge?: DshToolBridge
 }
 
 /** DSH Agent surface whose durable Session remains the only recovery truth. */
@@ -63,6 +66,7 @@ export class DshPiAgent implements Agent {
   private runEndReason: TurnEndReason | undefined
   private activeRun: KernelRun | undefined
   private readonly dependencies: DshPiAgentDependencies
+  private readonly toolBridge: DshToolBridge
 
   constructor(
     private readonly loopCtx: Context,
@@ -78,16 +82,19 @@ export class DshPiAgent implements Agent {
     this.systemPrompt = new SystemPromptProjection(session)
     const lastTurn = this.loopCtx.sessionProjections.stateOf(session, 'turnBoundary')?.lastTurn ?? 0
     this.phase = { kind: 'idle', lastTurn }
+    const toolBridge = dependencies?.toolBridge ?? new DshToolBridge(loopCtx, this)
     if (dependencies === undefined) {
-      const runtime = new DshStepRuntime(loopCtx, this, session)
+      const runtime = new DshStepRuntime(loopCtx, this, session, toolBridge)
       this.dependencies = {
         stepPreparer: runtime,
         driver: new PiKernelDriver(runtime),
         stepAt: position => runtime.stepAt(position),
+        toolBridge: runtime.tools,
       }
     } else {
       this.dependencies = dependencies
     }
+    this.toolBridge = toolBridge
   }
 
   /** Current externally visible lifecycle phase. */
@@ -250,9 +257,11 @@ export class DshPiAgent implements Agent {
     } finally {
       this.activeRun = undefined
       this.closeOpenAssistant()
+      this.toolBridge.abort()
       this.closeOpenStep(turn)
       this.preparedSteps.clear()
       this.session.append('turn/end', { turn, reason })
+      await this.loopCtx.sessions.flush(this.session)
     }
     return !signal.aborted && this.inbox.hasPending
   }
@@ -262,9 +271,13 @@ export class DshPiAgent implements Agent {
     signal.throwIfAborted()
     switch (event.type) {
       case 'run.started':
-      case 'tool.started':
       case 'tool.progress':
+        return
+      case 'tool.started':
+        this.toolBridge.start(event)
+        return
       case 'tool.completed':
+        await this.toolBridge.complete(event, signal)
         return
       case 'step.started': {
         const prepared = this.preparedSteps.get(event.position.step)
@@ -328,7 +341,13 @@ export class DshPiAgent implements Agent {
       this.liveAssistant = undefined
       return
     }
-    if (message.role !== 'user' || message.source.kind === 'tool') return
+    if (message.role === 'user' && message.source.kind === 'tool') {
+      const result = message.content[0]
+      if (result?.type !== 'tool-result') throw new Error('tool result message has no tool-result block')
+      this.toolBridge.commit(result.toolCallId, { turn, step })
+      return
+    }
+    if (message.role !== 'user') return
     this.session.append('user/message', message as UserMessage, { surfaceOp: 'append' })
   }
 
