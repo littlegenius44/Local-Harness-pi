@@ -30,7 +30,7 @@ PR-B still must prove exactly one default AgentFactory, DSH-only recovery truth,
 Before editing code, record the pinned hashes from `AGENTS.md`, then read only these relevant files completely:
 
 - DSH: `docs/cookbook/adding-a-package.md`; `packages/core/agent-loop/src/index.ts`, `agent.ts`, `inbox.ts`, `assistant-stream.ts`, `runtime-context.ts`; `packages/core/tools/src/index.ts`; `packages/core/session/src/index.ts`; `packages/session/session-checkpoint-policy/src/index.ts`; `packages/api/session-controller/src/commands.ts`; `packages/llm/llm-pi-ai/src/adapter.ts`, `context.ts`, `stream.ts`.
-- Pi: `packages/agent/src/agent-loop.ts`, `types.ts`; `packages/ai/src/utils/event-stream.ts`; OpenAI Responses and Completions event implementations used by `streamSimple`.
+- Pi: `agent/src/agent-loop.ts`, `types.ts`; `ai/src/utils/event-stream.ts`; OpenAI Responses and Completions event implementations used by `streamSimple`.
 - Codex: only the tool approval/cancellation boundary and turn-completion behavior identified in the V1 design; no Codex runtime code is copied.
 
 Do not reread the whole three repositories in each commit. Put source anchors and decisions in the PR description once, then reopen a source file only when an implementation uncertainty concerns that file.
@@ -76,6 +76,7 @@ Do not create `session-commit.ts`, `durability.ts`, `tool-commit-buffer.ts`, `ke
 - Create: `packages/core/agent-loop-pi/src/message-conversion.ts`
 - Create: `packages/core/agent-loop-pi/src/stream-conversion.ts`
 - Create: `packages/core/agent-loop-pi/src/model-bridge.ts`
+- Create: `packages/core/agent-loop-pi/src/index.ts` (contract exports only; plugin activation remains in Commit 4)
 - Create: `packages/core/agent-loop-pi/tests/boundary.spec.ts`
 - Modify: `tsconfig.base.json`
 - Modify: `tsconfig.host.json`
@@ -107,7 +108,7 @@ Expected: FAIL because the new package and exports do not exist.
 
 Implement the exact public types in `docs/architecture/interface-contracts.md` sections 4–5. That document is normative: do not create a reduced copy with plain-string IDs, omit `initialContext`, or replace `StableFailure`. The descriptor value is fixed as:
 
-```ts
+```ts design
 export const PI_KERNEL_DESCRIPTOR = {
   id: 'pi',
   version: '0.85.1',
@@ -191,7 +192,7 @@ Expected: FAIL because the Pi machine does not exist.
 
 `PiKernelDriver` must import `runAgentLoop` and configure:
 
-```ts
+```ts design
 await runAgentLoop(
   toPiMessages(input.initialMessages),
   toPiContext(input.initialContext),
@@ -282,7 +283,7 @@ Expected: FAIL because the serial bridge and message ACK barrier do not exist.
 
 Every proxy must call the public DSH pipeline:
 
-```ts
+```ts design
 const result = await ctx.tools.execute({
   callId,
   name,
@@ -300,7 +301,7 @@ Do not add a reorder buffer. A second tool cannot start until the first result h
 
 In `SessionCommandController.prompt()`:
 
-```ts
+```ts design
 if (hasPromptRequest(agent, request.requestId)) {
   await this.ctx.sessions.flush(agent.session)
   return { accepted: true }
@@ -309,14 +310,14 @@ if (hasPromptRequest(agent, request.requestId)) {
 
 After `agent.followup(message)` or `agent.steer(message)` and `binding.commit()`:
 
-```ts
+```ts design
 await this.ctx.sessions.flush(agent.session)
 return { accepted: true }
 ```
 
 In `DshPiAgent`, after appending `turn/end` and before transitioning to externally visible idle:
 
-```ts
+```ts design
 await this.ctx.sessions.flush(this.session)
 ```
 
@@ -344,7 +345,7 @@ git commit -m "feat: bridge serial tools and durability"
 
 **Files:**
 
-- Create: `packages/core/agent-loop-pi/src/index.ts`
+- Modify: `packages/core/agent-loop-pi/src/index.ts`
 - Create: `packages/core/agent-loop-pi/tests/integration.spec.ts`
 - Modify: `packages/bundle/base/package.json`
 - Modify: `packages/bundle/base/cordis.patch.yml`
@@ -382,7 +383,7 @@ Expected: FAIL because base still mounts the React loop.
 
 The only factory class added by PR-B is:
 
-```ts
+```ts design
 export class PiAgentLoop extends AgentLoop {
   protected override createMachine(input: AgentMachineCreateInput): AgentLoopMachine {
     return new DshPiAgent(input.ctx, input.id, input.options, input.session)

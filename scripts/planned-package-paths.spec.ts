@@ -3,8 +3,15 @@ import { plannedPackagePaths } from './planned-package-paths.ts'
 
 describe('plannedPackagePaths', () => {
   it('recognizes exact files explicitly scheduled for creation in implementation plans', () => {
-    expect([...plannedPackagePaths('docs/superpowers/plans/example.md', '- Create: `packages/core/agent/src/future.ts`')])
-      .toEqual(['packages/core/agent/src/future.ts'])
+    expect([...plannedPackagePaths('docs/superpowers/plans/example.md', [
+      '- Create: `packages/core/agent/src/future.ts`',
+      '- Test: `packages/core/agent/tests/future.spec.ts`',
+      '- Create：`packages/core/agent/src/future-zh.ts`',
+    ].join('\n'))]).toEqual([
+      'packages/core/agent/src/future.ts',
+      'packages/core/agent/tests/future.spec.ts',
+      'packages/core/agent/src/future-zh.ts',
+    ])
   })
 
   it('does not exempt modified files, arbitrary mentions, globs, or path traversal', () => {

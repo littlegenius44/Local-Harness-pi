@@ -30,7 +30,7 @@ PR-B 仍必须证明：默认组合只有一个 AgentFactory；DSH 是唯一恢�
 编辑代码前先记录 `AGENTS.md` 中的固定 hash，然后完整阅读且只阅读以下相关文件：
 
 - DSH：`docs/cookbook/adding-a-package.md`；`packages/core/agent-loop/src/index.ts`、`agent.ts`、`inbox.ts`、`assistant-stream.ts`、`runtime-context.ts`；`packages/core/tools/src/index.ts`；`packages/core/session/src/index.ts`；`packages/session/session-checkpoint-policy/src/index.ts`；`packages/api/session-controller/src/commands.ts`；`packages/llm/llm-pi-ai/src/adapter.ts`、`context.ts`、`stream.ts`。
-- Pi：`packages/agent/src/agent-loop.ts`、`types.ts`；`packages/ai/src/utils/event-stream.ts`；`streamSimple` 使用的 OpenAI Responses/Completions event 实现。
+- Pi：`agent/src/agent-loop.ts`、`types.ts`；`ai/src/utils/event-stream.ts`；`streamSimple` 使用的 OpenAI Responses/Completions event 实现。
 - Codex：只读 V1 设计中指定的工具审批/取消边界和 turn completion 行为；不得复制 Codex runtime 代码。
 
 四个提交之间不要反复重读三个完整仓库。首次把源码锚点和决定写进 PR 描述；仅当实现疑点涉及某个文件时才重新打开它。
@@ -76,6 +76,7 @@ PR-B 仍必须证明：默认组合只有一个 AgentFactory；DSH 是唯一恢�
 - Create：`packages/core/agent-loop-pi/src/message-conversion.ts`
 - Create：`packages/core/agent-loop-pi/src/stream-conversion.ts`
 - Create：`packages/core/agent-loop-pi/src/model-bridge.ts`
+- Create：`packages/core/agent-loop-pi/src/index.ts`（此时只导出契约；插件激活仍在提交 4）
 - Create：`packages/core/agent-loop-pi/tests/boundary.spec.ts`
 - Modify：`tsconfig.base.json`
 - Modify：`tsconfig.host.json`
@@ -105,7 +106,7 @@ corepack pnpm vitest run packages/core/agent-loop-pi/tests/boundary.spec.ts
 
 直接实现 `docs/architecture/interface-contracts.zh.md` 第 4–5 节的精确 public type。该文档是规范来源：不得另建使用普通 string ID 的缩水副本，不得省略 `initialContext`，也不得替换 `StableFailure`。descriptor 固定为：
 
-```ts
+```ts design
 export const PI_KERNEL_DESCRIPTOR = {
   id: 'pi',
   version: '0.85.1',
@@ -183,7 +184,7 @@ corepack pnpm vitest run packages/core/agent-loop-pi/tests/pi-agent.spec.ts
 
 `PiKernelDriver` import `runAgentLoop` 并固定：
 
-```ts
+```ts design
 await runAgentLoop(
   toPiMessages(input.initialMessages),
   toPiContext(input.initialContext),
@@ -268,7 +269,7 @@ corepack pnpm vitest run packages/core/agent-loop-pi/tests/tool-durability.spec.
 
 每个 proxy 必须进入 public DSH pipeline：
 
-```ts
+```ts design
 const result = await ctx.tools.execute({
   callId,
   name,
@@ -286,7 +287,7 @@ Pi 固定 `toolExecution: 'sequential'`，每个 proxy 固定 `executionMode: 's
 
 `SessionCommandController.prompt()` 中：
 
-```ts
+```ts design
 if (hasPromptRequest(agent, request.requestId)) {
   await this.ctx.sessions.flush(agent.session)
   return { accepted: true }
@@ -295,14 +296,14 @@ if (hasPromptRequest(agent, request.requestId)) {
 
 在 `agent.followup(message)` 或 `agent.steer(message)` 与 `binding.commit()` 之后：
 
-```ts
+```ts design
 await this.ctx.sessions.flush(agent.session)
 return { accepted: true }
 ```
 
 `DshPiAgent` append `turn/end` 后、对外进入 idle 前：
 
-```ts
+```ts design
 await this.ctx.sessions.flush(this.session)
 ```
 
@@ -326,7 +327,7 @@ git commit -m "feat: bridge serial tools and durability"
 
 **文件：**
 
-- Create：`packages/core/agent-loop-pi/src/index.ts`
+- Modify：`packages/core/agent-loop-pi/src/index.ts`
 - Create：`packages/core/agent-loop-pi/tests/integration.spec.ts`
 - Modify：`packages/bundle/base/package.json`
 - Modify：`packages/bundle/base/cordis.patch.yml`
@@ -362,7 +363,7 @@ corepack pnpm vitest run packages/core/agent-loop-pi/tests/integration.spec.ts p
 
 PR-B 唯一新增 factory class：
 
-```ts
+```ts design
 export class PiAgentLoop extends AgentLoop {
   protected override createMachine(input: AgentMachineCreateInput): AgentLoopMachine {
     return new DshPiAgent(input.ctx, input.id, input.options, input.session)

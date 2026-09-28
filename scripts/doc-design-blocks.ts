@@ -7,6 +7,7 @@ const designOwners = new Set([
   'docs/superpowers/plans/2026-09-10-local-harness-pi-pr-b-pi-kernel.md',
   'docs/superpowers/plans/2026-09-10-local-harness-pi-pr-c-product-loop.md',
   'docs/superpowers/plans/2026-09-18-agent-machine-seam-rectification.md',
+  'docs/superpowers/plans/2026-09-27-local-harness-pi-pr-b-minimal-serial.md',
 ])
 
 /**

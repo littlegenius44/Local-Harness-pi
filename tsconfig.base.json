@@ -29,6 +29,7 @@
     // under its own tsconfig boundary.
     "paths": {
       "@local-harness/product-identity": ["./packages/util/product-identity/src/index.ts"],
+      "@local-harness/pi-agent-loop": ["./packages/core/agent-loop-pi/src/index.ts"],
       "@deepseek-ai/cordis": ["./vendor/cordis/src"],
       "@deepseek-ai/cosmokit": ["./vendor/cosmokit/src"],
       "@deepseek-ai/schemastery": ["./vendor/schemastery/src"],

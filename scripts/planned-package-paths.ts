@@ -9,7 +9,7 @@
 export function plannedPackagePaths(file: string, text: string): ReadonlySet<string> {
   if (!file.replaceAll('\\', '/').startsWith('docs/superpowers/plans/')) return new Set()
   const paths = new Set<string>()
-  for (const match of text.matchAll(/^- Create: `(packages\/[A-Za-z0-9._/-]+)`\s*$/gm)) {
+  for (const match of text.matchAll(/^- (?:Create|Test)[:：]\s*`(packages\/[A-Za-z0-9._/-]+)`\s*$/gm)) {
     const path = match[1]
     if (path !== undefined && !path.split('/').some(part => part === '.' || part === '..' || part === '')) paths.add(path)
   }

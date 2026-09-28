@@ -23,4 +23,9 @@ describe('designBlockErrors', () => {
     expect(validateDesignBlock(file, 'export interface Future { value: PlannedValue }')).toEqual([])
     expect(validateDesignBlock(file, 'export interface Future { value: }')).not.toEqual([])
   })
+
+  it('accepts the approved minimal serial PR-B implementation plan', () => {
+    const file = 'docs/superpowers/plans/2026-09-27-local-harness-pi-pr-b-minimal-serial.md'
+    expect(validateDesignBlock(file, 'export interface Future { value: PlannedValue }')).toEqual([])
+  })
 })
