@@ -12,6 +12,7 @@ import {
   type TurnPosition,
 } from './kernel-driver.ts'
 import { fromPiMessage, piToolCalls } from './message-conversion.ts'
+import { dshChunksFor, dshTerminalChunksFor } from './stream-conversion.ts'
 
 interface StepState {
   readonly position: TurnPosition
@@ -243,8 +244,9 @@ function finishChunk(message: Extract<PiMessage, { role: 'assistant' }>): Stream
 export class PiKernelEventTranslator {
   private step = 0
   private streamRevision = 0
-  private currentMessage: { pi: PiMessage; dshId: MessageId } | undefined
+  private currentMessage: { pi: PiMessage; dshId: MessageId; exactTerminal: boolean } | undefined
   private readonly callIndexes = new Map<string, number>()
+  private readonly callArguments = new Map<string, string>()
   private readonly progressRevisions = new Map<string, number>()
   private lastReason: Extract<KernelEvent, { type: 'run.completed' }>['reason'] = { kind: 'completed' }
 
@@ -264,11 +266,27 @@ export class PiKernelEventTranslator {
       case 'message_start': {
         const pi = event.message as PiMessage
         const dsh = fromPiMessage(pi, this.model())
-        this.currentMessage = { pi, dshId: dsh.id }
+        this.currentMessage = { pi, dshId: dsh.id, exactTerminal: false }
         return [{ type: 'message.started', position: this.position(), message: dsh }]
       }
       case 'message_update': {
         const current = this.requireMessage()
+        const source = dshChunksFor(event.assistantMessageEvent)
+        if (source !== undefined) {
+          for (const chunk of source) {
+            if (chunk.type === 'block-end' && chunk.block.type === 'tool-call') {
+              this.callArguments.set(chunk.block.id, chunk.block.arguments)
+            }
+          }
+          if (source.some(chunk => chunk.type === 'finish')) current.exactTerminal = true
+          return source.map(delta => ({
+            type: 'message.delta' as const,
+            position: this.position(),
+            messageId: current.dshId,
+            streamRevision: ++this.streamRevision,
+            delta,
+          }))
+        }
         const chunk = updateChunk(event.assistantMessageEvent)
         if (chunk === undefined) return []
         return [{
@@ -284,7 +302,20 @@ export class PiKernelEventTranslator {
         const pi = event.message as PiMessage
         const dsh = fromPiMessage(pi, this.model(), current.dshId)
         const translated: KernelEvent[] = []
-        if (pi.role === 'assistant') {
+        const exactTerminal = pi.role === 'assistant' ? dshTerminalChunksFor(pi) : undefined
+        if (exactTerminal !== undefined) {
+          for (const delta of exactTerminal) {
+            translated.push({
+              type: 'message.delta',
+              position: this.position(),
+              messageId: dsh.id,
+              streamRevision: ++this.streamRevision,
+              delta,
+            })
+          }
+          current.exactTerminal = true
+        }
+        if (pi.role === 'assistant' && !current.exactTerminal) {
           translated.push({
             type: 'message.delta',
             position: this.position(),
@@ -308,6 +339,8 @@ export class PiKernelEventTranslator {
             streamRevision: ++this.streamRevision,
             delta: finishChunk(pi),
           })
+        }
+        if (pi.role === 'assistant') {
           this.callIndexes.clear()
           for (const [sourceIndex, call] of piToolCalls(pi).entries()) {
             this.callIndexes.set(call.id, sourceIndex)
@@ -320,12 +353,14 @@ export class PiKernelEventTranslator {
       case 'tool_execution_start': {
         const sourceIndex = this.callIndexes.get(event.toolCallId)
         if (sourceIndex === undefined) throw orderError(`Pi started unknown tool call "${event.toolCallId}"`)
+        const serializedArguments = this.callArguments.get(event.toolCallId)
         return [{
           type: 'tool.started',
           position: this.position(),
           callId: ToolCallId(event.toolCallId),
           name: event.toolName,
           arguments: event.args,
+          ...serializedArguments === undefined ? {} : { serializedArguments },
           sourceIndex,
         }]
       }
@@ -400,7 +435,7 @@ export class PiKernelEventTranslator {
     return { turn: this.turn, step: this.step }
   }
 
-  private requireMessage(): { pi: PiMessage; dshId: MessageId } {
+  private requireMessage(): { pi: PiMessage; dshId: MessageId; exactTerminal: boolean } {
     if (this.currentMessage === undefined) throw orderError('Pi updated or ended a message before message_start')
     return this.currentMessage
   }

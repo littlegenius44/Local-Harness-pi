@@ -35,6 +35,8 @@ kind: "package-reference"
 
 `kernel-driver.ts` 管理稳定的产品边界。转换器把 DSH 事实映射为进程内 Pi 值，模型桥接器消费不可变的步骤快照。此包不新增持久化存储，也不拥有第二个 Session 写句柄。
 
+此包不发布运行时 invariant companion；继承工厂契约复用 DSH agent-loop invariant，而 Pi 特有的顺序与持久性规则由包内测试覆盖。
+
 </details>
 
 -----

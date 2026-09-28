@@ -31,7 +31,8 @@ describe('dsh-base bundle', () => {
       patch => patch.insert ?? [],
     )
     expect(rows.length).toBeGreaterThan(50)
-    expect(rows.some(row => row.id === 'agent-loop')).toBe(true)
+    const agentLoops = rows.filter(row => row.id === 'agent-loop')
+    expect(agentLoops).toEqual([expect.objectContaining({ name: '@local-harness/pi-agent-loop' })])
     expect(rows.find(row => row.id === 'session-telemetry-otel')?.disabled).toBeUndefined()
     expect(rows.find(row => row.id === 'session-telemetry-otel')?.config?.['mode']).toEqual({
       __jsExpr: "process.env.DSH_TELEMETRY_MODE || 'FEEDBACK_ONLY'",
@@ -48,6 +49,8 @@ describe('dsh-base bundle', () => {
     expect(manifest.dependencies).not.toHaveProperty('@deepseek-ai/dsh-subagent-codex')
     expect(manifest.dependencies).not.toHaveProperty('@deepseek-ai/dsh-subagent-claude-code')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-web-fetch-http')
+    expect(manifest.dependencies).toHaveProperty('@local-harness/pi-agent-loop')
+    expect(manifest.dependencies).not.toHaveProperty(['@deepseek-ai/dsh-agent', 'loop'].join('-'))
   })
 
   it('gates each shell stack by platform with a symmetric disabled expression', () => {

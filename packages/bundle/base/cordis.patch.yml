@@ -470,7 +470,7 @@
     # Agents created at startup. The base stays empty; raw overlays may create
     # agents, while Web creates sessions on client request.
     - id: agent-loop
-      name: '@deepseek-ai/dsh-agent-loop'
+      name: '@local-harness/pi-agent-loop'
       config:
         agents: []
 

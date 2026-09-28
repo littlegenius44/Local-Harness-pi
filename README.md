@@ -8,7 +8,7 @@ The confirmed architecture is:
 
 > **DSH product platform + Pi conversational tool-loop kernel + a single DSH conversation/execution recovery source of truth.**
 
-The repository contains the pinned DSH source and is completing PR-A acceptance for desktop identity, isolated data storage, and security. The Pi conversational tool-loop kernel is not connected; this code is not a complete V1 release. Contributors must read the documents below and verify the pinned upstream source before executing the plans.
+The repository contains the pinned DSH source and the serial Pi conversational tool-loop kernel is connected through the inherited DSH Agent factory. DSH Session remains the only conversation and execution recovery source. This code is still under V1 acceptance and is not a complete release. Contributors must read the documents below and verify the pinned upstream source before executing the plans.
 
 Internal `dsh` package names, protocols, and events preserve upstream compatibility; they do not identify a second product. See [UPSTREAM.md](UPSTREAM.md) for provenance and licenses and the [desktop README](apps/desktop/README.md) for desktop development.
 
@@ -45,7 +45,8 @@ The completed build used Node.js 24.17.0 and the repository-pinned pnpm 11.7.0. 
 - Requirements and contracts: confirmed
 - Implementation plans: complete
 - PR-A: source imported, baseline builds/tests/documentation and isolated installer smoke passed; Draft PR handoff in progress
-- PR-B / PR-C: not started
+- PR-B: four-stage serial Pi kernel bridge implemented; full acceptance evidence is recorded in the [Pi kernel serial V1 boundary note](.agents/notes/implemented/architecture/2026-09-27-pi-kernel-serial-v1.md)
+- PR-C: not started
 
 ## Upstream baseline
 

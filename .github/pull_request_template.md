@@ -19,3 +19,7 @@
   <!-- 提供测试输出、截图、录屏、日志或其他可复核证据。 -->
 
   </details>
+
+## Agent loop boundary
+
+<!-- When the PR changes agent execution, record: the active AgentFactory count; DSH/Pi/Codex pins; whether Pi uses only runAgentLoop(); whether DSH Session remains the only recovery truth; prompt, before-tool-effect, and turn-settled flush evidence; and any serial/parallel tool limitation. Otherwise write Not applicable. -->

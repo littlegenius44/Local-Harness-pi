@@ -53,7 +53,7 @@ describe('dsh-sdk-minimal bundle', () => {
       ['agent-invariant', '@deepseek-ai/dsh-agent/invariant'],
       ['scope-invariant', '@deepseek-ai/dsh-scope/invariant'],
       ['agent-loop-invariant', '@deepseek-ai/dsh-agent-loop/invariant'],
-      ['agent-loop', '@deepseek-ai/dsh-agent-loop'],
+      ['agent-loop', '@local-harness/pi-agent-loop'],
       ['persistent-bash', '@deepseek-ai/dsh-tool-bash-persistent'],
       ['persistent-pwsh', '@deepseek-ai/dsh-tool-pwsh-persistent'],
       ['sessions', '@deepseek-ai/dsh-session-persistence-jsonl'],

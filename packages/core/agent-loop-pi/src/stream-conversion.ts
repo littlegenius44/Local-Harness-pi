@@ -11,6 +11,27 @@ import { KernelBoundaryError, type FrozenModelSelection } from './kernel-driver.
 
 type ChunkSource = Iterable<StreamChunk> | AsyncIterable<StreamChunk>
 
+const sourceChunks = new WeakMap<AssistantMessageEvent, readonly StreamChunk[]>()
+const terminalChunks = new WeakMap<AssistantMessage, readonly StreamChunk[]>()
+
+function withSourceChunks<T extends AssistantMessageEvent>(
+  event: T,
+  chunks: readonly StreamChunk[],
+): T {
+  sourceChunks.set(event, chunks)
+  return event
+}
+
+/** Exact DSH chunks represented by one converted Pi stream event. */
+export function dshChunksFor(event: AssistantMessageEvent): readonly StreamChunk[] | undefined {
+  return sourceChunks.get(event)
+}
+
+/** Exact terminal DSH chunks retained on the final Pi assistant message. */
+export function dshTerminalChunksFor(message: AssistantMessage): readonly StreamChunk[] | undefined {
+  return terminalChunks.get(message)
+}
+
 function streamError(message: string, cause?: unknown): KernelBoundaryError {
   return new KernelBoundaryError('KERNEL_STREAM_CONVERSION', message, {
     domain: 'MODEL',
@@ -110,24 +131,38 @@ export async function* toPiAssistantEvents(
     stopReason: 'pending',
     timestamp: 0,
   }
-  yield { type: 'start', partial: snapshot(message) }
+  yield withSourceChunks({ type: 'start', partial: snapshot(message) }, [])
+  let pendingChunks: StreamChunk[] = []
 
   for await (const chunk of chunks) {
+    pendingChunks.push(chunk)
     switch (chunk.type) {
       case 'block-start': {
         expectNextIndex(message, chunk.index)
         switch (chunk.blockType) {
           case 'text':
             message.content.push({ type: 'text', text: '' })
-            yield { type: 'text_start', contentIndex: chunk.index, partial: snapshot(message) }
+            yield withSourceChunks(
+              { type: 'text_start', contentIndex: chunk.index, partial: snapshot(message) },
+              pendingChunks,
+            )
+            pendingChunks = []
             break
           case 'reasoning':
             message.content.push({ type: 'thinking', thinking: '' })
-            yield { type: 'thinking_start', contentIndex: chunk.index, partial: snapshot(message) }
+            yield withSourceChunks(
+              { type: 'thinking_start', contentIndex: chunk.index, partial: snapshot(message) },
+              pendingChunks,
+            )
+            pendingChunks = []
             break
           case 'tool-call':
             message.content.push({ type: 'toolCall', id: '', name: '', arguments: {} })
-            yield { type: 'toolcall_start', contentIndex: chunk.index, partial: snapshot(message) }
+            yield withSourceChunks(
+              { type: 'toolcall_start', contentIndex: chunk.index, partial: snapshot(message) },
+              pendingChunks,
+            )
+            pendingChunks = []
             break
           case 'image':
           case 'file':
@@ -142,14 +177,22 @@ export async function* toPiAssistantEvents(
         const block = blockAt(message, chunk.index)
         if (block.type !== 'text') throw streamError(`text delta targeted ${block.type} block ${chunk.index}`)
         block.text += chunk.text
-        yield { type: 'text_delta', contentIndex: chunk.index, delta: chunk.text, partial: snapshot(message) }
+        yield withSourceChunks(
+          { type: 'text_delta', contentIndex: chunk.index, delta: chunk.text, partial: snapshot(message) },
+          pendingChunks,
+        )
+        pendingChunks = []
         break
       }
       case 'reasoning-delta': {
         const block = blockAt(message, chunk.index)
         if (block.type !== 'thinking') throw streamError(`reasoning delta targeted ${block.type} block ${chunk.index}`)
         block.thinking += chunk.text
-        yield { type: 'thinking_delta', contentIndex: chunk.index, delta: chunk.text, partial: snapshot(message) }
+        yield withSourceChunks(
+          { type: 'thinking_delta', contentIndex: chunk.index, delta: chunk.text, partial: snapshot(message) },
+          pendingChunks,
+        )
+        pendingChunks = []
         break
       }
       case 'tool-call-delta': {
@@ -157,12 +200,13 @@ export async function* toPiAssistantEvents(
         if (block.type !== 'toolCall') throw streamError(`tool delta targeted ${block.type} block ${chunk.index}`)
         block.id = chunk.id
         if (chunk.name !== undefined) block.name = chunk.name
-        yield {
+        yield withSourceChunks({
           type: 'toolcall_delta',
           contentIndex: chunk.index,
           delta: chunk.argumentsDelta,
           partial: snapshot(message),
-        }
+        }, pendingChunks)
+        pendingChunks = []
         break
       }
       case 'block-end': {
@@ -171,22 +215,24 @@ export async function* toPiAssistantEvents(
           case 'text':
             if (partial.type !== 'text') throw streamError(`text ended ${partial.type} block ${chunk.index}`)
             message.content[chunk.index] = { type: 'text', text: chunk.block.text }
-            yield {
+            yield withSourceChunks({
               type: 'text_end',
               contentIndex: chunk.index,
               content: chunk.block.text,
               partial: snapshot(message),
-            }
+            }, pendingChunks)
+            pendingChunks = []
             break
           case 'reasoning':
             if (partial.type !== 'thinking') throw streamError(`reasoning ended ${partial.type} block ${chunk.index}`)
             message.content[chunk.index] = { type: 'thinking', thinking: chunk.block.text }
-            yield {
+            yield withSourceChunks({
               type: 'thinking_end',
               contentIndex: chunk.index,
               content: chunk.block.text,
               partial: snapshot(message),
-            }
+            }, pendingChunks)
+            pendingChunks = []
             break
           case 'tool-call': {
             if (partial.type !== 'toolCall') throw streamError(`tool call ended ${partial.type} block ${chunk.index}`)
@@ -197,12 +243,13 @@ export async function* toPiAssistantEvents(
               arguments: parseArguments(chunk.block.arguments, chunk.block.id),
             }
             message.content[chunk.index] = toolCall
-            yield {
+            yield withSourceChunks({
               type: 'toolcall_end',
               contentIndex: chunk.index,
               toolCall,
               partial: snapshot(message),
-            }
+            }, pendingChunks)
+            pendingChunks = []
             break
           }
           case 'image':
@@ -222,10 +269,17 @@ export async function* toPiAssistantEvents(
         message.stopReason = terminal.reason
         if (terminal.errorMessage !== undefined) message.errorMessage = terminal.errorMessage
         const finalMessage = snapshot(message)
+        terminalChunks.set(finalMessage, pendingChunks)
         if (terminal.event === 'done') {
-          yield { type: 'done', reason: terminal.reason as 'stop' | 'length' | 'toolUse', message: finalMessage }
+          yield withSourceChunks(
+            { type: 'done', reason: terminal.reason as 'stop' | 'length' | 'toolUse', message: finalMessage },
+            pendingChunks,
+          )
         } else {
-          yield { type: 'error', reason: terminal.reason as 'aborted' | 'error', error: finalMessage }
+          yield withSourceChunks(
+            { type: 'error', reason: terminal.reason as 'aborted' | 'error', error: finalMessage },
+            pendingChunks,
+          )
         }
         return
       }

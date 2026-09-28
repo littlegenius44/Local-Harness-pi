@@ -404,7 +404,6 @@ describe('PiKernelDriver', () => {
       'message.delta',
       'message.delta',
       'message.delta',
-      'message.delta',
       'message.completed',
       'step.completed',
       'run.completed',

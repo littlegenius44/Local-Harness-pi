@@ -116,7 +116,7 @@
       name: '@deepseek-ai/dsh-agent-loop/invariant'
 
     - id: agent-loop
-      name: '@deepseek-ai/dsh-agent-loop'
+      name: '@local-harness/pi-agent-loop'
       config:
         agents: []
 

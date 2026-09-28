@@ -16,7 +16,7 @@ import {
   ReactLoopInbox,
   SystemPromptProjection,
 } from '@deepseek-ai/dsh-agent-loop'
-import type { AssistantMessage, Message } from '@deepseek-ai/dsh-llm'
+import { createAssistantMessage, type AssistantMessage, type Message } from '@deepseek-ai/dsh-llm'
 import type { Scope } from '@deepseek-ai/dsh-scope'
 import { createScope } from '@deepseek-ai/dsh-scope'
 import type { Session, SessionId, TurnEndReason, UserMessage } from '@deepseek-ai/dsh-session'
@@ -267,7 +267,6 @@ export class DshPiAgent implements Agent {
   }
 
   private async commitKernelEvent(event: KernelEvent, signal: AbortSignal): Promise<void> {
-    await Promise.resolve()
     signal.throwIfAborted()
     switch (event.type) {
       case 'run.started':
@@ -283,6 +282,8 @@ export class DshPiAgent implements Agent {
         const prepared = this.preparedSteps.get(event.position.step)
           ?? this.dependencies.stepAt?.(event.position)
         if (prepared === undefined) throw new Error(`kernel started unprepared step ${event.position.step}`)
+        this.session.append('step/start', event.position)
+        this.openStep = event.position.step
         for (const commit of this.systemPrompt.project(prepared.prompt.rendered, {
           inHistory: false,
           startsSeries: prepared.startsRequestSeries,
@@ -292,8 +293,6 @@ export class DshPiAgent implements Agent {
             message: commit.message,
           }, commit.intent)
         }
-        this.session.append('step/start', event.position)
-        this.openStep = event.position.step
         return
       }
       case 'message.started':
@@ -331,10 +330,19 @@ export class DshPiAgent implements Agent {
     if (message.role === 'assistant') {
       const live = this.liveAssistant
       if (live === undefined) throw new Error('assistant message completed without a live attempt')
+      const source = (message as AssistantMessage).source
+      const committed = createAssistantMessage({
+        content: live.blocks(),
+        source: {
+          provider: source.provider,
+          model: source.model,
+          ...live.replayState === undefined ? {} : { replayState: live.replayState },
+        },
+      })
       live.settle('assistant/message', () => this.session.append('assistant/message', {
         turn,
         step,
-        message: message as AssistantMessage,
+        message: committed,
         ...live.usage === undefined ? {} : { usage: live.usage },
         stream: live.stream,
       }, { surfaceOp: 'append' }).seq)

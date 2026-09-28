@@ -163,6 +163,8 @@ export type KernelEvent =
     readonly callId: ToolCallId
     readonly name: string
     readonly arguments: unknown
+    /** Exact model-emitted JSON retained for the durable DSH call record. */
+    readonly serializedArguments?: string
     readonly sourceIndex: number
   }
   | {

@@ -35,6 +35,8 @@ This private Host package is the replaceable kernel boundary for Local-Harness-p
 
 `kernel-driver.ts` owns the stable product seam. The converters map DSH facts into process-local Pi values, while the model bridge consumes immutable step snapshots. The package adds no persistence store and never owns a second Session write handle.
 
+No runtime invariant companion is published; the package reuses the DSH agent-loop invariant for the inherited factory contract, while its Pi-specific ordering and durability rules are covered by package tests.
+
 </details>
 
 -----

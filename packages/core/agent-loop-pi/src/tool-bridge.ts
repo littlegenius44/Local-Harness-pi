@@ -68,7 +68,7 @@ export class DshToolBridge {
       ...event.position,
       callId: event.callId,
       name: event.name,
-      arguments: JSON.stringify(event.arguments),
+      arguments: event.serializedArguments ?? JSON.stringify(event.arguments),
     })
     this.active = {
       position: event.position,

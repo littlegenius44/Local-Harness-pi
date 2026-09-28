@@ -35,6 +35,7 @@ describe('DshToolBridge', () => {
   it('routes one call through ctx.tools.execute and commits the lossless result after its call', async () => {
     const { ctx, session, agent, inject, bridge } = await harness()
     const callId = ToolCallId('call-1')
+    const serializedArguments = '{ "value" : "x" }'
     const deferred = createUserMessage({
       content: [{ type: 'text', text: 'next-step context' }],
       source: { kind: 'plugin', plugin: 'fixture' },
@@ -58,7 +59,7 @@ describe('DshToolBridge', () => {
     session.append('assistant/message', {
       turn: 1,
       step: 1,
-      message: assistantWithCall(callId, 'write', '{"value":"x"}'),
+      message: assistantWithCall(callId, 'write', serializedArguments),
       stream: [],
     }, { surfaceOp: 'append' })
 
@@ -68,6 +69,7 @@ describe('DshToolBridge', () => {
       callId,
       name: 'write',
       arguments: { value: 'x' },
+      serializedArguments,
       sourceIndex: 0,
     })
     const result = await bridge.execute(
@@ -98,6 +100,7 @@ describe('DshToolBridge', () => {
     const events = session.snapshotEvents()
     const call = events.find(event => event.type === 'tool/call')
     const committed = events.find(event => event.type === 'tool/result')
+    expect(call).toMatchObject({ data: { arguments: serializedArguments } })
     expect(committed).toMatchObject({
       data: {
         message: { content: [{ type: 'tool-result', content: result.content, isError: false }] },
