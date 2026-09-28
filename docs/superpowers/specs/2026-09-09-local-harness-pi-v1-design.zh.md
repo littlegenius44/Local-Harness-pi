@@ -130,9 +130,10 @@ Pi `AgentHarness` 已经包含自己的 Session、JSONL、SQLite、恢复、Comp
 
 V1 允许导入：
 
-- `Agent`
-- `runAgentLoop` / `runAgentLoopContinue`（若具体实现需要）
+- `runAgentLoop`
 - `AgentEvent`、`AgentTool`、`AgentContext` 等 Agent Core 类型
+
+V1 明确不构造有状态 Pi `Agent`；DSH Inbox 与 `DshPiAgent` 仍是唯一 live queue/lifecycle 所有者。
 
 V1 禁止运行时依赖：
 
@@ -149,7 +150,7 @@ V1 禁止运行时依赖：
 适配层由三层组成：
 
 1. `PiAgentLoop`：继承 DSH `AgentLoop`，只覆盖 protected `createMachine()`；`AgentFactory` 生命周期完全由父类拥有。
-2. `DshPiAgent`：实现 DSH `Agent` 运行接口，拥有 DSH Inbox、状态和 Pi 运行实例。
+2. `DshPiAgent`：实现 DSH `Agent` 运行接口，拥有 DSH Inbox、状态和每次可丢弃的低层 Pi run。
 3. `PiKernelDriver`：唯一与 Pi Agent Core 直接交互的组件，暴露稳定、内核无关的最小 conversational tool-loop 接口；V1 不把它定义成通用 agent graph/runtime。
 
 Pi Agent 的 transcript 只是当前进程中的派生缓存：
@@ -199,7 +200,7 @@ Pi 事件不是持久化协议。适配器将其映射为两类输出：
 | `turn_end` | 追加 `step/end` |
 | `agent_end` | 追加 `turn/end`，随后状态收敛为 idle |
 
-并行工具可能按完成时间发出 `tool_execution_end`，但 durable `tool/result` 必须按 assistant 中的源顺序提交。适配器必须维护有界重排缓冲区，不能用完成顺序写日志。
+V1 将 Pi 工具执行固定为源顺序串行。前一个工具结果进入 DSH Session 前，后一个工具 body 不得开始；Kernel descriptor 报告 `parallelTools: false`，且不存在 reorder buffer。按参数判断并发安全的并行执行及其 recovery matrix 延期到 `PARALLEL-110`。
 
 `Session.append()` 是逻辑提交而不是通用的抗崩溃承诺。V1 额外要求以下 durability barrier：用户消息向 Client 确认为已接纳前、每个 `tool/call` 进入实际工具执行前、`turn/end` 对外完成和 Agent 进入 idle 前，必须对该 Session 的 write handle 执行并成功完成 `flush()`。flush 失败立即停止运行。
 
@@ -221,6 +222,8 @@ V1 不实现公开 OpenAI-compatible 入站网关；桌面 UI/CLI 继续调用 D
 ## 12. 工具、审批与权限
 
 `DshToolBridge` 把当前 Agent scope 中 DSH `tools.schemas(agent)` 的可见工具包装成 Pi `AgentTool`。真正执行必须调用 DSH `tools.execute()`，不得直接调用工具函数。
+
+V1 把 Pi loop-level `toolExecution` 与每个 proxy 的 `executionMode` 都固定为 `sequential`。继承的 DSH `maxParallelToolCalls` 设置不改变 Pi machine。
 
 这样可以保留：
 
@@ -385,10 +388,10 @@ V1 日志记录：sessionId 的安全短标识、runId、turn/step、provider ro
 
 在直接复用 DSH、由一个主实现 Codex 串行推进、另一个 Codex 独立复审的前提下：
 
-- V1 乐观：22 个工作日，按 5 个日历周安排。
-- V1 常规：25 个工作日，约 5 个日历周。
-- V1 保守：29 个工作日，约 6 个日历周。
-- 以 GPT-5.6 Sol Plus 的完整周额度衡量：约 3.2–4.7 个周额度；额度等待可能延长日历时间，但不改变净工作日。
+- V1 乐观：18 个工作日，按 4 个日历周安排。
+- V1 常规：21 个工作日，约 4–5 个日历周。
+- V1 保守：24 个工作日，约 5 个日历周。
+- 以 GPT-5.6 Sol Plus 的完整周额度衡量：约 2.5–3.8 个周额度；额度等待可能延长日历时间，但不改变净工作日。
 - V1.1 不属于本实施计划的承诺工期。按当前四类范围（Office/PDF 编辑、完整浏览器自动化、签名更新、细粒度安全）只做容量级粗估：额外 4–8 个日历周、约 3–6 个完整周额度；必须在 V1 稳定后另写需求、接口和分 PR 计划再承诺日期，证书采购/签发等待另计。
 
 V1 估算包含源码复核、实现、测试、MCP 图形化管理、产品闭环回归、20% 左右集成修复余量和复审；不包含等待人工决定、真实模型服务不可用、签名证书申请或上游大版本升级。不得通过取消 Session/Pi/MCP P0 测试压缩工期，只能减少视觉微调或延期已获批准的 P1。

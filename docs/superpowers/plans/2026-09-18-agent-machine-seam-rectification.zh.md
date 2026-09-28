@@ -1,5 +1,7 @@
 # Agent Machine Seam Rectification Implementation Plan
 
+> **状态更新（2026-09-27）：** PR-A machine seam 已完成。PR-B 的 R2–R5 实现细节由项目所有者确认的 [最简串行 Pi 内核计划](2026-09-27-local-harness-pi-pr-b-minimal-serial.zh.md) 取代：V1 使用低层 `runAgentLoop()`、串行工具、现有 DSH durability API 和四个提交。R1 仅保留为 PR-A 历史记录。
+
 [English](2026-09-18-agent-machine-seam-rectification.md) | 中文
 
 标为 `ts design` 的代码是待实施设计片段，只验证语法，不代表当前可调用的 API；省略的宿主依赖在对应实施任务中接线，并须通过源码类型检查和契约测试。
@@ -129,7 +131,7 @@
 
 - [ ] 保留真正不透明的值为 `unknown`：工具 arguments 在 schema 校验前、abort reason、脱敏错误 details、Pi 私有 metadata。不得为了消灭 `unknown` 新建 Local Harness `Message`、`ContentBlock` 或 `StreamChunk`。
 
-- [ ] 用 fixture 覆盖 Unicode、图片、reasoning、并行 tool call、error tool result 和未知 metadata；DSH→Pi→DSH 转换不得丢失稳定 id、source、content 或 finish reason。
+- [ ] 用 fixture 覆盖 Unicode、图片、reasoning、两个按源顺序串行的 tool call、error tool result 和未知 metadata；DSH→Pi→DSH 转换不得丢失稳定 id、source、content 或 finish reason。
 
 - [ ] 运行并提交。
 
@@ -194,7 +196,7 @@
 - Test: `packages/core/agent-loop-pi/tests/compaction-through-pi.integration.spec.ts`
 
 - [ ] PR-B 通过后标记 `M0 Kernel Integration`。M0 是 PR-C 开工的 go/no-go，不是对外 V1 发布。
-- [ ] M0 必须证明：默认组合恰好一个 factory；Pi 只承担 conversational model-tool loop；DSH Session 是 conversation/execution recovery truth；恢复不读取 Pi store；三类 flush barrier、工具乱序提交、Compaction generation 和 crash matrix 全绿。
+- [ ] M0 必须证明：默认组合恰好一个 factory；Pi 只承担 conversational model-tool loop；DSH Session 是 conversation/execution recovery truth；恢复不读取 Pi store；三类 flush barrier、工具不重叠且按源顺序串行提交、Compaction generation 和聚焦 crash matrix 全绿。
 - [ ] M0 不引入 Tool Effect Taxonomy、Evidence/Critic store、通用 agent graph、多 Agent 编排或新的领域数据库。领域 `Decision`、`Evidence`、`Artifact` 可由后续领域服务拥有，但凡影响恢复后模型行为的引用、状态变化和执行结果必须以稳定 ref/event 进入 DSH Session。
 - [ ] 将完整命令输出、固定上游 hash、失败注入点和已知限制附到 Draft PR；任何一项失败都不得开始依赖真实 Pi 行为的 PR-C 修改。
 
@@ -221,8 +223,8 @@
 ## 工期影响
 
 - PR-A：由 4–5 日调整为 5–6 日，增加 seam、回归测试和文档同步。
-- PR-B：由 8–11 日调整为 7–10 日，删除复制与维护 factory lifecycle 的工作。
+- PR-B：进一步删除重复 durability service、通用 conformance framework、并行 reorder buffer 与有状态 Pi Agent wrapper 后，调整为 3–5 日。
 - PR-C：仍为 7–9 日；`main` 稳定化仍为 3–4 日。
-- 总净工作量仍为 22–29 日；变化是把 1 日高风险架构工作前移到 PR-A，并减少 PR-B 的重复生命周期实现与复审面。
+- 总净工作量调整为 18–24 日。PR-A 仍负责高风险 lifecycle seam；已确认的串行 PR-B 在不削弱 Session、恢复、审批或取消正确性的前提下缩小实现与复审面。
 
 本计划不改变用户已确认的 V1 产品范围，只纠正实现边界和门禁顺序。

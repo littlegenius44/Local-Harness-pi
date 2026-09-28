@@ -4,7 +4,7 @@ English | [中文](interface-contracts.zh.md)
 
 Fences marked `ts design` are planned implementation excerpts checked for syntax only, not available APIs. Their omitted host dependencies must be wired and pass source typechecking and contract tests in the owning implementation task.
 
-Document version: 1.2
+Document version: 1.3
 
 Contract version: `1`
 
@@ -94,7 +94,7 @@ export interface KernelDescriptor {
   readonly capabilities: Readonly<{
     streaming: true
     tools: true
-    parallelTools: boolean
+    parallelTools: false
     steering: boolean
     reasoning: boolean
     images: boolean
@@ -117,7 +117,7 @@ export interface KernelToolSchema {
   readonly label: string
   readonly description: string
   readonly parameters: Readonly<Record<string, unknown>>
-  readonly executionMode: 'parallel' | 'sequential'
+  readonly executionMode: 'sequential'
 }
 
 export interface KernelContextSnapshot {
@@ -388,57 +388,21 @@ Preparation order:
 
 Cancellation during asynchronous preparation must not leave a spurious `step/start` record for a step that was never entered.
 
-## 10. SessionCommitPort
+## 10. DSH Session commit and durability reuse
 
-Only this port writes kernel execution facts into DSH Session:
+PR-B creates no Session commit or durability service. `DshPiAgent` and its event bridge append execution facts through the existing DSH `Session.append()` API, and durability barriers call the existing `ctx.sessions.flush(session)` API. The persistence plugin remains the sole owner of the write handle.
 
-```ts design
-export interface SessionCommitPort {
-  startTurn(turn: number): SessionSeq
-  startStep(position: TurnPosition): SessionSeq
-  commitSystemMessages(step: PreparedKernelStep): readonly SessionSeq[]
-  commitUserMessage(position: TurnPosition, message: UserMessage): SessionSeq
-  commitAssistant(
-    position: TurnPosition,
-    message: unknown,
-    stream: unknown,
-    usage?: unknown,
-  ): SessionSeq
-  commitAssistantAttempt(position: TurnPosition, attempt: unknown): SessionSeq
-  commitToolCall(position: TurnPosition, call: DshToolCall): SessionSeq
-  commitToolResult(
-    position: TurnPosition,
-    result: DshToolBridgeResult,
-    callSeq: SessionSeq,
-  ): SessionSeq
-  endStep(position: TurnPosition): SessionSeq
-  endTurn(turn: number, reason: DshTurnEndReason): SessionSeq
-  flush(reason: 'message-ack' | 'before-tool-effect' | 'turn-settled', signal?: AbortSignal): Promise<void>
-}
+Requirements:
 
-export interface SessionDurabilityPort {
-  flush(
-    sessionId: SessionId,
-    reason: 'message-ack' | 'before-tool-effect' | 'turn-settled',
-    signal?: AbortSignal,
-  ): Promise<void>
-}
-```
-
-Port requirements:
-
-- Methods internally call only DSH `Session.append()` and existing projection services.
-- Commit each `(runId, eventIndex)` only once; duplicate calls trigger an invariant error rather than silently appending.
-- `commitToolResult` must include the corresponding `callSeq` as `sourceEventSeqs`.
-- Emit live assistant streams only through DSH `agent/assistant-stream`; only final `commitAssistant` creates a durable message.
-- Abort the Pi run immediately if Session append fails; do not execute subsequent tools.
-- `append()` means logical commit only; crash durability is promised only after successful `flush()`.
-- Complete `flush('message-ack')` before Host acknowledges acceptance of a user message.
-- Complete `flush('before-tool-effect')` after committing each `tool/call` and before starting the actual tool body.
-- Complete `flush('turn-settled')` after `turn/end` and before success or idle becomes externally visible.
-- Map flush failure to `SESSION_WRITE_FAILED` and stop execution.
-
-`SessionDurabilityPort` only routes sessionId to the DSH write handle already owned by AgentFactory. It creates no handle, stores no events, and is not a second persistence service. Asynchronous Host send commands wait for the message acknowledgement barrier through this port.
+- Commit each translated kernel event once; duplicate or illegal event order raises `KERNEL_EVENT_ORDER` instead of silently appending.
+- A `tool/result` includes its matching `tool/call` seq in `sourceEventSeqs`.
+- Emit live assistant streams only through DSH `agent/assistant-stream`; only the final assistant settlement creates a durable `assistant/message` or `assistant/attempt`.
+- Abort the Pi run immediately if a Session append fails; do not execute a later tool.
+- `append()` is a logical commit. Crash durability is promised only after successful `ctx.sessions.flush(session)`.
+- `SessionCommandController.prompt()` awaits `ctx.sessions.flush(agent.session)` before both first-time and idempotent accepted responses.
+- The existing `session-checkpoint-policy` awaits the same API after each committed top-level `tool/call` and before the actual DSH tool body.
+- `DshPiAgent` appends `turn/end`, then awaits `ctx.sessions.flush(this.session)`, then exposes success/idle.
+- A required flush failure maps to `SESSION_WRITE_FAILED` and prevents success acknowledgement.
 
 ## 11. ModelRoute configuration contract
 
@@ -565,7 +529,7 @@ DSH Message is the canonical product format. Conversion must meet these rules:
 - UI-only, Goal/Plan, and runtime state must not masquerade as LLM conversation messages; DSH prompt projection determines their model visibility.
 - Do not drop a block and continue after conversion failure; return `KERNEL_MESSAGE_CONVERSION`.
 
-Each converter must have round-trip fixtures covering at least Unicode, empty strings, nested JSON, image references, reasoning, parallel tool calls, and error tool results.
+Each converter must have round-trip fixtures covering at least Unicode, empty strings, nested JSON, image references, reasoning, two source-ordered serial tool calls, and error tool results.
 
 ## 14. DshToolBridge
 
@@ -624,34 +588,23 @@ Bridge rules for Pi `AgentTool.execute()` and `afterToolCall`:
 5. Release cached entries after durable tool result commit or abort cleanup.
 6. A cache miss is `KERNEL_TOOL_RESULT_MISSING`.
 
+V1 fixes both Pi's loop-level `toolExecution` and each proxy's `executionMode` to `sequential`. The cache therefore holds at most the current call result, and a second tool body cannot start until the first result has entered the DSH Session.
+
 Before step 1 actually enters `tools.execute()`, the event bridge must have committed the corresponding `tool/call` and completed `flush('before-tool-effect')`. The await barrier of the Pi async event listener prevents the tool body from crossing this durability boundary.
 
 This prevents Pi's default convenience contract that failures must throw from swallowing structured DSH error content.
 
-## 15. Parallel tools and commit reordering
+## 15. Serial tool ordering
 
-```ts design
-export interface ToolCommitBuffer {
-  register(call: DshToolCall, callSeq: SessionSeq): void
-  settleExecution(result: DshToolBridgeResult): void
-  observeTranscriptResult(callId: ToolCallId): void
-  drainReady(): readonly Readonly<{
-    call: DshToolCall
-    callSeq: SessionSeq
-    result: DshToolBridgeResult
-  }>[]
-  assertEmptyAtStepEnd(): void
-}
-```
+V1 executes tool calls strictly in the assistant's source order:
 
-Rules:
+1. Await the translated `tool_execution_start` sink.
+2. Append `tool/call` and let the existing checkpoint policy finish its flush.
+3. Enter `ctx.tools.execute()` for that call.
+4. Await Pi's tool-result `message_end` and append `tool/result` with the matching call seq.
+5. Clear the one-call cache before the next call may start.
 
-- `register` uses strictly increasing `sourceIndex` values.
-- Results may reach `settleExecution` out of order.
-- Call `observeTranscriptResult` when Pi toolResult `message_end` arrives, proving that the result entered the Pi transcript.
-- `drainReady` yields only entries whose execution completed and whose transcript result was observed, consecutively from the next expected sourceIndex.
-- Every started call must have a result before step end; cancellation generates `TOOL_ABORTED_BEFORE_DISPATCH` for calls not executed.
-- Buffer size must not exceed the current assistant's tool call count; excess triggers `KERNEL_TOOL_BUFFER_OVERFLOW`.
+Cancellation before a later call starts produces the existing DSH `TOOL_ABORTED_BEFORE_DISPATCH` result where required by recovery rules. No parallel dispatch, completion reordering, or `ToolCommitBuffer` exists in V1. Those semantics are reserved for `PARALLEL-110`.
 
 ## 16. Approval contract
 
@@ -1050,7 +1003,7 @@ Do not close Session before cancelling Pi: late events could otherwise write thr
 
 ## 24. Contract test checklist
 
-Implementations must provide a reusable contract suite covering at least:
+Implementations must provide focused contract coverage for at least:
 
 1. Legal Kernel event order and every class of illegal order.
 2. Async sink commit barriers.
@@ -1060,7 +1013,7 @@ Implementations must provide a reusable contract suite covering at least:
 6. DSH↔Pi message/stream round trip。
 7. Model freezing per step and switching at the next step.
 8. No bypass of the DSH tool pipeline.
-9. Out-of-order parallel tool completion with source-order commits.
+9. Two tool calls execute and commit serially in source order, with no overlapping bodies.
 10. approval stale/duplicate。
 11. Client durable/runtime deduplication and snapshot reload on seq gaps.
 12. Pi starts no new tools after Session append failure.
@@ -1069,4 +1022,4 @@ Implementations must provide a reusable contract suite covering at least:
 15. MCP create defaults to disabled, whole-record CAS, cross-source name conflicts, tool rename acknowledgement, and committed-but-apply-error semantics.
 16. MCP credential values never leave Host; rotation restarts only referencing records, and per-server reconciliation leaves sibling servers unaffected.
 
-Mock KernelDriver must pass this suite; PiKernelDriver must reuse the same suite. Future kernels may enter the default composition only after passing it.
+A small test-local fake KernelDriver must cover DSH machine lifecycle and illegal event order; PiKernelDriver uses the focused conversion, tool, recovery, and integration cases above. A reusable cross-kernel conformance suite is required only when a second production kernel is proposed.

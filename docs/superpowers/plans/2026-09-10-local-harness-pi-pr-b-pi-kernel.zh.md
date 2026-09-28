@@ -1,5 +1,7 @@
 # PR-B Pi Kernel Bridge Implementation Plan
 
+> **已于 2026-09-27 废止。** 不得按本文继续实现。项目所有者已确认采用更小的串行工具方案和四提交计划，当前唯一执行入口是 [PR-B 最简串行 Pi 内核实施计划](2026-09-27-local-harness-pi-pr-b-minimal-serial.zh.md)。本文仅保留为设计历史。
+
 [English](2026-09-10-local-harness-pi-pr-b-pi-kernel.md) | 中文
 
 标为 `ts design` 的代码是待实施设计片段，只验证语法，不代表当前可调用的 API；省略的宿主依赖在对应实施任务中接线，并须通过源码类型检查和契约测试。

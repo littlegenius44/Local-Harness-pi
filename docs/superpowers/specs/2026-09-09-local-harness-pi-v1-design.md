@@ -130,9 +130,10 @@ Pi `AgentHarness` already has its own Session, JSONL, SQLite, recovery, Compacti
 
 V1 allows importing:
 
-- `Agent`
-- `runAgentLoop` / `runAgentLoopContinue` (if required by the implementation)
+- `runAgentLoop`
 - Agent Core types such as `AgentEvent`, `AgentTool`, and `AgentContext`
+
+V1 deliberately does not construct the stateful Pi `Agent`; DSH Inbox and `DshPiAgent` remain the only live queue/lifecycle owners.
 
 V1 forbids runtime dependencies on:
 
@@ -149,7 +150,7 @@ Dependency checking must be a CI gate: any forbidden entry above in the producti
 The adapter has three layers:
 
 1. `PiAgentLoop`: inherits DSH `AgentLoop` and overrides only protected `createMachine()`; the superclass owns the entire `AgentFactory` lifecycle.
-2. `DshPiAgent`: implements the DSH `Agent` runtime interface and owns DSH Inbox, state, and the Pi runtime instance.
+2. `DshPiAgent`: implements the DSH `Agent` runtime interface and owns DSH Inbox, state, and each disposable low-level Pi run.
 3. `PiKernelDriver`: the sole component interacting directly with Pi Agent Core; it exposes a stable, kernel-independent minimal conversational tool-loop interface, not a general agent graph/runtime in V1.
 
 The Pi Agent transcript is only a derived cache in the current process:
@@ -199,7 +200,7 @@ Key mappings:
 | `turn_end` | Append `step/end` |
 | `agent_end` | Append `turn/end`, then converge to idle |
 
-Parallel tools may emit `tool_execution_end` in completion order, but durable `tool/result` must commit in assistant source order. The adapter must maintain a bounded reorder buffer, never log by completion order.
+V1 fixes Pi tool execution to serial source order. A later tool body cannot start before the preceding tool result enters DSH Session; the kernel descriptor reports `parallelTools: false`, and no reorder buffer exists. Argument-aware parallel execution and its recovery matrix are deferred to `PARALLEL-110`.
 
 `Session.append()` is a logical commit, not a general crash-durability promise. V1 additionally requires successful `flush()` on the Session write handle before acknowledging user-message acceptance to Client, before each `tool/call` enters actual execution, and before externally completing `turn/end` and entering idle. Stop the run immediately if flush fails.
 
@@ -221,6 +222,8 @@ V1 implements no public OpenAI-compatible inbound gateway; desktop UI/CLI contin
 ## 12. Tools, approval, and permissions
 
 `DshToolBridge` wraps visible tools from the current Agent scope's DSH `tools.schemas(agent)` as Pi `AgentTool`. Actual execution must call DSH `tools.execute()`, never tool functions directly.
+
+Both Pi's loop-level `toolExecution` and each proxy's `executionMode` are fixed to `sequential` in V1. The inherited DSH `maxParallelToolCalls` setting does not change the Pi machine.
 
 This preserves:
 
@@ -385,10 +388,10 @@ If PR-B becomes too large, split only into B1/B2 for “run/model bridge” and 
 
 Assuming direct DSH reuse, one primary Codex implementing sequentially, and another Codex reviewing independently:
 
-- Optimistic V1: 22 working days, scheduled over 5 calendar weeks.
-- Typical V1: 25 working days, approximately 5 calendar weeks.
-- Conservative V1: 29 working days, approximately 6 calendar weeks.
-- In full GPT-5.6 Sol Plus weekly quotas: approximately 3.2–4.7; quota waiting may extend calendar time without changing net working days.
+- Optimistic V1: 18 working days, scheduled over 4 calendar weeks.
+- Typical V1: 21 working days, approximately 4–5 calendar weeks.
+- Conservative V1: 24 working days, approximately 5 calendar weeks.
+- In full GPT-5.6 Sol Plus weekly quotas: approximately 2.5–3.8; quota waiting may extend calendar time without changing net working days.
 - V1.1 is outside this plan's committed schedule. For the current four scope categories (Office/PDF editing, full browser automation, signed updates, fine-grained security), a capacity-level estimate only is 4–8 additional calendar weeks and approximately 3–6 full weekly quotas; after V1 stabilizes, write separate requirements, interfaces, and per-PR plans before committing dates, with certificate purchase/issuance waits accounted for separately.
 
 The V1 estimate includes source review, implementation, tests, graphical MCP management, product-workflow regression, approximately 20% integration-fix margin, and rereview; it excludes waiting for human decisions, unavailable real model services, certificate requests, and upstream major upgrades. Never shorten it by dropping Session/Pi/MCP P0 tests; reduce visual polish or defer approved P1 work only.

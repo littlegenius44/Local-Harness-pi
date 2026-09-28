@@ -1,5 +1,7 @@
 # PR-B Pi Kernel Bridge Implementation Plan
 
+> **Superseded on 2026-09-27.** Do not implement this plan. The project owner approved the smaller serial-tool design and four-commit execution plan in [PR-B Minimal Serial Pi Kernel Implementation Plan](2026-09-27-local-harness-pi-pr-b-minimal-serial.md). This file remains only as design history.
+
 English | [中文](2026-09-10-local-harness-pi-pr-b-pi-kernel.zh.md)
 
 Fences marked `ts design` are planned implementation excerpts checked for syntax only, not available APIs. Their omitted host dependencies must be wired and pass source typechecking and contract tests in the owning implementation task.

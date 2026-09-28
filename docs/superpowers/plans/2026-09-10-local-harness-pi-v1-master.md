@@ -17,7 +17,7 @@ English | [中文](2026-09-10-local-harness-pi-v1-master.zh.md)
 This master plan owns sequencing, gates, and PR delivery only. Detailed implementation steps are in three subplans:
 
 1. [PR-A: DSH baseline, product boundaries, and machine seam](2026-09-10-local-harness-pi-pr-a-dsh-baseline.md)
-2. [PR-B: Pi kernel bridge](2026-09-10-local-harness-pi-pr-b-pi-kernel.md)
+2. [PR-B: minimal serial Pi kernel bridge](2026-09-27-local-harness-pi-pr-b-minimal-serial.md)
 3. [PR-C: Complete V1 product workflow](2026-09-10-local-harness-pi-pr-c-product-loop.md)
 
 Dependency order is fixed as `PR-A -> PR-B -> PR-C`. The [Agent Machine Seam Rectification Plan](2026-09-18-agent-machine-seam-rectification.md) folds this architecture correction into unfinished PR-A/PR-B rather than creating A.5: the machine seam belongs to PR-A; typed Kernel contracts and the `PiAgentLoop` subclass belong to PR-B. Option 2 About/licenses belong to PR-A, Compaction/session-kernel regression to PR-B, and GUI-managed MCP/full product regression to PR-C; do not create a fourth long-lived branch. Only if one PR-B diff exceeds roughly 2,500 handwritten business-code lines or cannot converge after two consecutive review rounds may it split into B1/B2 as specified by its subplan. Do not develop MCP/UI in parallel with PR-B and guess the interfaces afterward.
@@ -28,10 +28,10 @@ Dependency order is fixed as `PR-A -> PR-B -> PR-C`. The [Agent Machine Seam Rec
 |---|---|---|
 | `PLAT-001`–`PLAT-003` | A1–A7, C8, C9 | Windows unsigned NSIS, version locks, provenance/license gates, default AgentLoop regression |
 | `FR-001`–`FR-004` | A3–A5, C9 | Workspace/single-instance/window security, About/offline licenses, Windows smoke |
-| `FR-010`–`FR-019` | B3, B4, B8–B10, C7, C9 | Agent lifecycle, message acknowledgement, recovery, Compaction, session organization/fork/search/export matrix |
-| `FR-020`–`FR-025` | B1–B9 | Dependency boundary, KernelDriver conformance, sole AgentFactory |
-| `FR-030`–`FR-037` | B4, C1, C9 | Local/cloud Responses and Completions, first launch and discovery fallback matrix |
-| `FR-040`–`FR-047` | B5, B6, B10, C6, C7 | Tool, approval, workspace, failure, context, Diff/Terminal, and tool-card tests |
+| `FR-010`–`FR-019` | PR-B commits 1–4, C7, C9 | Agent lifecycle, message acknowledgement, recovery, Compaction, session organization/fork/search/export matrix |
+| `FR-020`–`FR-026` | PR-B commits 1–4 | Dependency boundary, narrow KernelDriver, serial tools, sole AgentFactory |
+| `FR-030`–`FR-037` | PR-B commits 1 and 4, C1, C9 | Local/cloud Responses and Completions, first launch and discovery fallback matrix |
+| `FR-040`–`FR-047` | PR-B commits 3 and 4, C6, C7 | Serial tool, approval, workspace, failure, context, Diff/Terminal, and tool-card tests |
 | `FR-050`–`FR-052` | C5, C7, C9 | `/goal`, `/plan`, Plus menu, and recovery tests |
 | `FR-060`–`FR-067` | C2–C5, C7, C9 | Skill, MCP CRUD/CAS/credentials, plugin inventory, effective permissions, failure-isolation tests |
 | `FR-070`–`FR-072` | C5, C7, C9 | Attachments, PDF preview, Web tools product flow |
@@ -41,7 +41,7 @@ Dependency order is fixed as `PR-A -> PR-B -> PR-C`. The [Agent Machine Seam Rec
 | `FR-092` | V1.1 | V1 scope-violation scan and known-limitations record |
 | `NFR-001`–`NFR-006` | B3–B10, C6, C7, C9 | Session ordering, three flush barriers, Compaction, crash/SQLite rebuild matrix |
 | `NFR-010`–`NFR-014` | A5, B4, B5, C1–C4, C8, C9 | Credential/network/Electron/MCP/plugin/log-redaction matrix |
-| `NFR-020`–`NFR-022` | B7–B10, C3, C4, C9 | Baseline comparison, cache bounds, MCP reconcile, cancellation/resource-cleanup tests |
+| `NFR-020`–`NFR-022` | PR-B commits 2–4, C3, C4, C9 | Baseline comparison, cache bounds, MCP reconcile, cancellation/resource-cleanup tests |
 | `NFR-030`–`NFR-032` | C4–C7, C9 | Keyboard, actionable errors, and understandable-state tests |
 | `TEST-001`–`TEST-006` | A2, A3, B1, B10, C1, C3, C7, C9 | Source/dependency, model, tool, recovery, product, and security matrices |
 | `AC-001`–`AC-010` | B10, C1, C3, C5, C7, C9 | Local/cloud models, recovery, coexistence, UI deduplication, first launch, session library, MCP, and long-session end-to-end evidence |
@@ -137,7 +137,7 @@ Blockers: unknown provenance, mismatched upstream hashes, weakened Electron isol
 
 After PR-B, default composition registers exactly one `AgentFactory`: `PiAgentLoop` inherits the DSH `AgentLoop` lifecycle and drives the conversational tool-loop through Pi Agent Core only via the machine seam; models, tools, and all durable events still use DSH services. Recovery reads only DSH Session, with flush barriers before tool side effects and turn completion. M0 is the formal PR-C go/no-go, not an external release.
 
-Blockers: production dependencies include Pi Harness Session/Skills/Compaction; Pi copies or reimplements AgentFactory lifecycle; base activates a second factory; Pi directly executes tools or reads model keys; UI reads Pi events; a second transcript exists; parallel tools write Session in completion order; or flush failure still returns success. M0 excludes Tool Effect Taxonomy, Evidence/Critic stores, general agent graphs, and multi-Agent orchestration.
+Blockers: production dependencies include Pi Harness Session/Skills/Compaction or the stateful Pi `Agent`; Pi copies or reimplements AgentFactory lifecycle; base activates a second factory; Pi bypasses DSH tools or reads model keys; UI reads Pi events; a second transcript exists; Pi overlaps two V1 tool bodies; or flush failure still returns success. M0 excludes parallel Pi tools, Tool Effect Taxonomy, Evidence/Critic stores, general agent graphs, and multi-Agent orchestration.
 
 ### Checkpoint C: Deliverable V1
 
@@ -223,20 +223,19 @@ A full GPT-5.6 Sol Plus weekly quota is a relative capacity unit, not a permanen
 ### 6.2 Net effort by phase
 
 - PR-A: 5–6 working days, roughly 0.7–1.0 full weekly quotas. Source import, provenance locks, complete product/Web/model identity, About/licenses, data isolation, Electron security, and behavior-neutral Agent machine seam.
-- PR-B: 7–10 working days, roughly 1.2–1.8 full weekly quotas. Typed conversational KernelDriver, model/tool bridges, durability, inherited Pi machine, recovery, and DSH Compaction compatibility; this is the critical path.
+- PR-B: 3–5 working days, roughly 0.5–0.9 full weekly quotas. Narrow conversational KernelDriver, serial model/tool bridges, reuse of DSH durability, inherited Pi machine, recovery, and DSH Compaction compatibility; this remains the critical path.
 - PR-C: 7–9 working days, roughly 1.0–1.4 full weekly quotas. Shared guarded-fetch, OpenAI route/onboarding, GUI-managed MCP, settings/Plus menu, session/Diff/Terminal regression, updates, and Desktop E2E.
 - `main` stabilization and release: 3–4 working days, roughly 0.3–0.5 full weekly quotas. Fix discovered defects, rerun matrices, and prepare release evidence only; add no features.
 
-Total: 22–29 net working days and roughly 3.2–4.7 full weekly quotas. The normal baseline is 25 working days, approximately five calendar weeks and 3.9 full weekly quotas; even optimistic scheduling uses five weeks, with a conservative sixth week reserved.
+Total: 18–24 net working days and roughly 2.5–3.8 full weekly quotas. The normal baseline is 21 working days, approximately four to five calendar weeks and 3.2 full weekly quotas; the conservative fifth week is reserved for stabilization.
 
 ### 6.3 Suggested weekly schedule
 
-- Week 1: finish PR-A. Reach checkpoint A on working day 5–6; if everything passes early, use remaining quota only for B1–B2 source rereading and failing tests, without starting UI early.
-- Week 2: complete B3–B6, covering messages/context, models, tools, and Session commit bridge.
-- Week 3: complete B7–B10, crash/compaction matrix, and M0. Do not start PR-C code depending on real Pi semantics before PR-B/M0 passes.
-- Week 4: complete C1–C4: shared guarded-fetch, model onboarding, capability inventory, Host MCP, and MCP/UI settings.
-- Week 5: complete C5–C9 and checkpoint C, then run all gates on `main` for the first time.
-- Week 6 (conservative buffer): handle only cross-package type generation, Windows packaging, MCP process cleanup, performance gates, or independently reviewed defects; do not consume this week without defects.
+- Week 1: finish PR-A. Reach checkpoint A on working day 5–6; if everything passes early, use remaining quota only for PR-B source rereading and Commit 1 failing tests, without starting UI early.
+- Week 2: complete PR-B commits 1–4, its focused crash/compaction matrix, and M0. Do not start PR-C code depending on real Pi semantics before PR-B/M0 passes.
+- Week 3: complete C1–C4: shared guarded-fetch, model onboarding, capability inventory, Host MCP, and MCP/UI settings.
+- Week 4: complete C5–C9 and checkpoint C, then run all gates on `main` for the first time.
+- Week 5 (conservative buffer): handle only cross-package type generation, Windows packaging, MCP process cleanup, performance gates, or independently reviewed defects; do not consume this week without defects.
 
 ### 6.4 Quota and deferral rules
 

@@ -292,18 +292,17 @@ Append the correct step/turn closer according to the assistant stop reason and s
 
 Client does not identify duplicates by message text, timestamps, or array position.
 
-## 13. Parallel tools
+## 13. Serial Pi tools in V1
 
-Pi may execute tools in parallel, but Session events retain model source order:
+Pi V1 executes tools serially in assistant source order:
 
-1. Assign `sourceIndex` in the order of tool calls in assistant content.
-2. Append `tool/call` events in sourceIndex order.
-3. Execution results may arrive out of order and update the live UI.
-4. Durable tool/result events enter `ToolCommitBuffer`.
-5. Commit batches only when a continuous sequence starting at the next sourceIndex is ready.
-6. The buffer must be empty before step/end.
+1. Assign `sourceIndex` in assistant-content order.
+2. Append one `tool/call` and finish the pre-effect flush.
+3. Execute that call through DSH Tools.
+4. Append its linked `tool/result` before starting the next call.
+5. Append `step/end` only after the last result settles.
 
-This keeps replay, model input, and the UI deterministic across machines.
+This requires no reorder buffer and keeps replay, model input, and UI deterministic. Parallel Pi tools and their crash-recovery contract belong to `PARALLEL-110`.
 
 ## 14. SQLite derived index
 
@@ -469,7 +468,7 @@ Each scenario runs in a child process until a designated fault injection point, 
 - Two processes resume the same session concurrently; only one succeeds.
 - While a live writer holds ownership, the search index can observe the committed prefix without acquiring write ownership.
 - When a configuration update races with a model request, the current step uses a frozen snapshot.
-- Parallel tools complete in reverse order, while Session retains source order.
+- Two Pi V1 tools requested together never overlap and commit in source order.
 
 ### 22.3 Property tests
 

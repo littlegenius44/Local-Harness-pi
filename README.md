@@ -35,7 +35,7 @@ The completed build used Node.js 24.17.0 and the repository-pinned pnpm 11.7.0. 
 
 - [V1 master plan and three Draft PR checkpoints](docs/superpowers/plans/2026-09-10-local-harness-pi-v1-master.md)
 - [PR-A: DSH baseline, desktop identity, and security](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-a-dsh-baseline.md)
-- [PR-B: Pi Agent Core bridge and single conversation/execution recovery source of truth](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-b-pi-kernel.md)
+- [PR-B: minimal serial Pi Agent Core bridge and single conversation/execution recovery source of truth](docs/superpowers/plans/2026-09-27-local-harness-pi-pr-b-minimal-serial.md)
 - [PR-C: OpenAI-compatible configuration and V1 desktop workflow](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-c-product-loop.md)
 
 ## Current status

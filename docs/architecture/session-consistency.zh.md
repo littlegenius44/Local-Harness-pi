@@ -292,18 +292,17 @@ V1 不另加一套 WAL，而是固定使用 DSH persistence flush seam。必须�
 
 Client 不以消息文本、时间戳或数组位置判断重复。
 
-## 13. 并行工具
+## 13. V1 Pi 工具串行执行
 
-Pi 可以并行执行工具，但 Session 事件保持模型源顺序：
+Pi V1 按 assistant source order 串行执行工具：
 
-1. 按 assistant content 中的 tool call 顺序分配 `sourceIndex`。
-2. `tool/call` 按 sourceIndex 追加。
-3. 执行结果可以乱序返回并更新 live UI。
-4. durable tool/result 进入 `ToolCommitBuffer`。
-5. 仅当从下一个 sourceIndex 开始连续就绪时批量提交。
-6. step/end 前 buffer 必须为空。
+1. 按 assistant content 顺序分配 `sourceIndex`。
+2. append 一个 `tool/call` 并完成副作用前 flush。
+3. 通过 DSH Tools 执行该调用。
+4. append 其关联 `tool/result` 后才启动下一个调用。
+5. 最后一个结果 settled 后才 append `step/end`。
 
-这让重放、模型输入和 UI 在不同机器上保持确定性。
+该方案不需要 reorder buffer，并保证重放、模型输入和 UI 在不同机器上确定一致。Pi 并行工具及其 crash-recovery 契约属于 `PARALLEL-110`。
 
 ## 14. SQLite 派生索引
 
@@ -469,7 +468,7 @@ V1 不实现云同步。将用户数据同步到云端必须另立威胁模型�
 - 两进程同时 resume 同一 session，只有一个成功。
 - live writer 持有时搜索索引可观察 committed prefix，不获得写权。
 - 配置更新与模型请求竞争时，当前 step 使用冻结快照。
-- 并行工具以反向完成顺序结束，Session 仍按源顺序。
+- 同一响应请求的两个 Pi V1 工具不重叠执行，并按源顺序提交。
 
 ### 22.3 属性测试
 

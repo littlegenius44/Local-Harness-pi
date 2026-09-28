@@ -2,7 +2,7 @@
 
 [English](v1-requirements.md) | 中文
 
-文档版本：1.2
+文档版本：1.3
 
 适用版本：V1
 
@@ -177,7 +177,7 @@ V1 默认组合必须只激活 `@local-harness/pi-agent-loop` 一个 AgentFactor
 
 ### FR-021（P0）Pi 依赖边界
 
-生产运行时只允许使用 Pi Agent Core 的循环、Agent、事件和工具类型。禁止加载 Pi Harness Session、Skills、Compaction 和 built-in coding tools。
+生产运行时只允许使用 Pi Agent Core 的低层 `runAgentLoop()`、事件和工具类型。V1 不得构造有状态 Pi `Agent`。禁止加载 Pi Harness Session、Skills、Compaction 和 built-in coding tools。
 
 ### FR-022（P0）上下文重建
 
@@ -185,7 +185,7 @@ V1 默认组合必须只激活 `@local-harness/pi-agent-loop` 一个 AgentFactor
 
 ### FR-023（P0）事件屏障
 
-Pi `Agent.subscribe()` 的异步 listener 必须按顺序 await。`agent_end` 只有在所有 DSH Session 追加、turn 末尾 `flush()` 和必要收尾完成后才可使 DSH Agent 进入 idle。
+Kernel event sink Promise 必须按顺序 await。`agent_end` 只有在所有 DSH Session 追加、turn 末尾 `ctx.sessions.flush(session)` 和必要收尾完成后才可使 DSH Agent 进入 idle。
 
 ### FR-024（P0）Turn/Step 映射
 
@@ -193,7 +193,11 @@ Pi `Agent.subscribe()` 的异步 listener 必须按顺序 await。`agent_end` �
 
 ### FR-025（P1）未来内核接口
 
-Pi 必须位于 `KernelDriver` 之后。DSH Agent/UI/Session 不得 import Pi 事件类型。V1 的 `KernelDriver` 只抽象对话式模型—工具循环，不承诺通用 agent graph、多 Agent 编排或任意后台 workflow。V1 不需要第二实现，但应提供 mock driver 完成契约测试。
+Pi 必须位于 `KernelDriver` 之后。DSH Agent/UI/Session 不得 import Pi 事件类型。V1 的 `KernelDriver` 只抽象对话式模型—工具循环，不承诺通用 agent graph、多 Agent 编排或任意后台 workflow。V1 不需要第二实现；machine contract 测试使用一个测试文件内的小型 fake driver 即可。
+
+### FR-026（P0）V1 工具串行执行
+
+Pi-backed V1 loop 必须按 assistant source order 串行执行工具调用。Kernel descriptor 报告 `parallelTools: false`，每个 Pi proxy 报告 sequential execution，`maxParallelToolCalls` 不改变 Pi machine。并行 dispatch 与 commit 重排属于 `PARALLEL-110`，不在 V1 验收范围内。
 
 ## 8. 模型配置与调用
 
@@ -460,7 +464,7 @@ Playwright/Computer-use、登录态、下载和页面交互进入 V1.1，不是 
 
 ### NFR-021（P0）有界缓存
 
-Pi event reorder、stream delta、tool output preview 和 Session projection 缓冲区必须有明确上限。大输出应沿用 DSH 截断或附件/spill 策略。
+Pi event 顺序、stream delta、单个活跃串行工具结果缓存、tool output preview 和 Session projection 缓冲区必须有明确上限。大输出应沿用 DSH 截断或附件/spill 策略。
 
 ### NFR-022（P0）资源清理
 
@@ -500,7 +504,7 @@ UI 必须区分：等待模型、流式生成、等待审批、执行工具、�
 
 ### TEST-003（P0）工具矩阵
 
-至少覆盖：读文件、搜索、patch、shell、未知工具、schema 错误、审批 allow/deny、超时、取消、并行完成乱序、`additionalContexts` 和 `concludesTurn`。
+至少覆盖：读文件、搜索、patch、shell、未知工具、schema 错误、审批 allow/deny、超时、取消、两个工具按 assistant source order 串行执行并提交、`additionalContexts` 和 `concludesTurn`。必须断言 Pi Kernel 从不重叠执行两个工具 body。
 
 ### TEST-004（P0）会话恢复矩阵
 
@@ -591,6 +595,7 @@ V1.1 候选需求固定为：
 - BROWSER-110：Playwright 浏览器自动化及独立权限域。
 - UPDATE-110：签名自动更新、安装回滚和发布密钥流程。
 - SECURITY-110：插件签名、细粒度 capability grant、网络隔离和审计导出。
+- PARALLEL-110：按参数判断并发安全的 Pi 工具并行调度、有界乱序完成 buffer、源顺序 durable commit 及其 crash/recovery matrix。
 
 这些需求在 V1 发布前只能保留扩展接口，不能提前实现。
 
@@ -599,7 +604,7 @@ V1.1 候选需求固定为：
 | 需求范围 | 主要 PR |
 |---|---|
 | PLAT、FR-001–004、基础 NFR-010–014 | PR-A |
-| FR-010–019、FR-020–025、FR-030–037、FR-040–047、NFR-001–006、TEST-001–004、AC-010 | PR-B |
+| FR-010–019、FR-020–026、FR-030–037、FR-040–047、NFR-001–006、TEST-001–004、AC-010 | PR-B |
 | FR-050–052、FR-060–067、FR-070–074、FR-080–083、FR-090–092、NFR-020–032、TEST-005–006、AC-001–009 | PR-C |
 
 PR-C 必须建立在 PR-B 的恢复和契约测试通过之后；UI 不得通过 mock 永久绕过真实 Pi/DSH 桥接。

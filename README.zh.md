@@ -35,7 +35,7 @@
 
 - [V1 主计划与三个 Draft PR 检查点](docs/superpowers/plans/2026-09-10-local-harness-pi-v1-master.zh.md)
 - [PR-A：DSH 源码基线、桌面品牌与安全边界](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-a-dsh-baseline.zh.md)
-- [PR-B：Pi Agent Core 内核桥与单一对话/执行恢复事实源](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-b-pi-kernel.zh.md)
+- [PR-B：最简串行 Pi Agent Core 内核桥与单一对话/执行恢复事实源](docs/superpowers/plans/2026-09-27-local-harness-pi-pr-b-minimal-serial.zh.md)
 - [PR-C：OpenAI-compatible 配置与 V1 桌面产品闭环](docs/superpowers/plans/2026-09-10-local-harness-pi-pr-c-product-loop.zh.md)
 
 ## 当前状态

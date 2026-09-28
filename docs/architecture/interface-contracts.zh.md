@@ -4,7 +4,7 @@
 
 标为 `ts design` 的代码是待实施设计片段，只验证语法，不代表当前可调用的 API；省略的宿主依赖在对应实施任务中接线，并须通过源码类型检查和契约测试。
 
-文档版本：1.2
+文档版本：1.3
 
 契约版本：`1`
 
@@ -94,7 +94,7 @@ export interface KernelDescriptor {
   readonly capabilities: Readonly<{
     streaming: true
     tools: true
-    parallelTools: boolean
+    parallelTools: false
     steering: boolean
     reasoning: boolean
     images: boolean
@@ -117,7 +117,7 @@ export interface KernelToolSchema {
   readonly label: string
   readonly description: string
   readonly parameters: Readonly<Record<string, unknown>>
-  readonly executionMode: 'parallel' | 'sequential'
+  readonly executionMode: 'sequential'
 }
 
 export interface KernelContextSnapshot {
@@ -388,57 +388,21 @@ export interface StepPreparer {
 
 任何异步准备期间取消，都不得留下只有 `step/start` 而没有实际进入 step 的伪记录。
 
-## 10. SessionCommitPort
+## 10. 复用 DSH Session commit 与 durability
 
-只有这个端口把内核运行事实写入 DSH Session：
+PR-B 不创建 Session commit 或 durability service。`DshPiAgent` 与 event bridge 通过既有 DSH `Session.append()` API 追加执行事实，durability barrier 直接调用既有 `ctx.sessions.flush(session)` API；persistence plugin 仍是 write handle 唯一所有者。
 
-```ts design
-export interface SessionCommitPort {
-  startTurn(turn: number): SessionSeq
-  startStep(position: TurnPosition): SessionSeq
-  commitSystemMessages(step: PreparedKernelStep): readonly SessionSeq[]
-  commitUserMessage(position: TurnPosition, message: UserMessage): SessionSeq
-  commitAssistant(
-    position: TurnPosition,
-    message: unknown,
-    stream: unknown,
-    usage?: unknown,
-  ): SessionSeq
-  commitAssistantAttempt(position: TurnPosition, attempt: unknown): SessionSeq
-  commitToolCall(position: TurnPosition, call: DshToolCall): SessionSeq
-  commitToolResult(
-    position: TurnPosition,
-    result: DshToolBridgeResult,
-    callSeq: SessionSeq,
-  ): SessionSeq
-  endStep(position: TurnPosition): SessionSeq
-  endTurn(turn: number, reason: DshTurnEndReason): SessionSeq
-  flush(reason: 'message-ack' | 'before-tool-effect' | 'turn-settled', signal?: AbortSignal): Promise<void>
-}
+要求：
 
-export interface SessionDurabilityPort {
-  flush(
-    sessionId: SessionId,
-    reason: 'message-ack' | 'before-tool-effect' | 'turn-settled',
-    signal?: AbortSignal,
-  ): Promise<void>
-}
-```
-
-端口要求：
-
-- 方法内部只调用 DSH `Session.append()` 和既有投影服务。
-- 每个 `(runId, eventIndex)` 只允许提交一次；重复调用触发不变量错误，不能静默追加。
-- `commitToolResult` 必须带对应 `callSeq` 作为 `sourceEventSeqs`。
-- assistant 的 live stream 只通过 DSH `agent/assistant-stream` 发出；最终 `commitAssistant` 才形成 durable message。
-- Session append 失败立即中止 Pi run；不能继续执行后续工具。
-- `append()` 只表示逻辑提交；只有 `flush()` 成功才承诺抗崩溃。
-- Host 确认用户消息已接纳前必须 `flush('message-ack')`。
-- 每个 `tool/call` 提交后、实际工具 body 开始前必须 `flush('before-tool-effect')`。
-- `turn/end` 后、运行成功或 idle 对外可见前必须 `flush('turn-settled')`。
-- flush 失败映射为 `SESSION_WRITE_FAILED` 并停止运行。
-
-`SessionDurabilityPort` 只把 sessionId 路由到 AgentFactory 已拥有的 DSH write handle，不创建新 handle、不保存 event，也不是第二个持久化服务。Host 的异步发送命令通过该端口等待消息确认屏障。
+- 每个翻译后的 Kernel event 只提交一次；重复或非法 event order 产生 `KERNEL_EVENT_ORDER`，不得静默追加。
+- `tool/result` 必须在 `sourceEventSeqs` 引用匹配的 `tool/call` seq。
+- assistant live stream 只通过 DSH `agent/assistant-stream` 发出；最终 settlement 才形成 durable `assistant/message` 或 `assistant/attempt`。
+- Session append 失败立即中止 Pi run；不得执行后续工具。
+- `append()` 只表示逻辑提交；只有 `ctx.sessions.flush(session)` 成功才承诺抗崩溃。
+- `SessionCommandController.prompt()` 在首次与幂等 accepted response 前都 await `ctx.sessions.flush(agent.session)`。
+- 既有 `session-checkpoint-policy` 在每个 top-level `tool/call` 提交后、实际 DSH tool body 前 await 同一 API。
+- `DshPiAgent` append `turn/end`，再 await `ctx.sessions.flush(this.session)`，最后才对外进入 success/idle。
+- 强制 flush 失败映射为 `SESSION_WRITE_FAILED`，不得确认成功。
 
 ## 11. ModelRoute 配置契约
 
@@ -565,7 +529,7 @@ DSH Message 是产品侧 canonical format。转换必须满足：
 - UI-only、Goal/Plan 和 runtime 状态不能伪装为 LLM 对话消息；它们通过 DSH prompt projection 决定是否模型可见。
 - 转换失败不得丢弃 block 后继续；返回 `KERNEL_MESSAGE_CONVERSION`。
 
-每个转换器必须有 round-trip fixture，至少覆盖 Unicode、空字符串、嵌套 JSON、图片引用、reasoning、并行 tool calls 和 error tool result。
+每个转换器必须有 round-trip fixture，至少覆盖 Unicode、空字符串、嵌套 JSON、图片引用、reasoning、两个按源顺序串行的 tool call 和 error tool result。
 
 ## 14. DshToolBridge
 
@@ -624,34 +588,23 @@ Pi `AgentTool.execute()` 与 `afterToolCall` 的桥接规则：
 5. 缓存在 durable tool result 提交或 abort 收尾后释放。
 6. 未命中缓存视为 `KERNEL_TOOL_RESULT_MISSING`。
 
+V1 把 Pi loop-level `toolExecution` 和每个 proxy 的 `executionMode` 都固定为 `sequential`。缓存因此最多只保存当前调用结果；第一个结果进入 DSH Session 前，第二个工具 body 不得开始。
+
 在第 1 步实际进入 `tools.execute()` 前，事件桥必须已经提交对应 `tool/call` 并完成 `flush('before-tool-effect')`。Pi async event listener 的 await 屏障保证工具 body 不会越过该持久化边界。
 
 这是为了避免 Pi “失败必须 throw” 的默认便利契约吞掉 DSH 已结构化的错误内容。
 
-## 15. 并行工具与提交重排
+## 15. 串行工具顺序
 
-```ts design
-export interface ToolCommitBuffer {
-  register(call: DshToolCall, callSeq: SessionSeq): void
-  settleExecution(result: DshToolBridgeResult): void
-  observeTranscriptResult(callId: ToolCallId): void
-  drainReady(): readonly Readonly<{
-    call: DshToolCall
-    callSeq: SessionSeq
-    result: DshToolBridgeResult
-  }>[]
-  assertEmptyAtStepEnd(): void
-}
-```
+V1 严格按 assistant source order 执行工具：
 
-规则：
+1. await 翻译后的 `tool_execution_start` sink。
+2. append `tool/call`，并让既有 checkpoint policy 完成 flush。
+3. 该调用进入 `ctx.tools.execute()`。
+4. await Pi tool-result `message_end`，以匹配 call seq append `tool/result`。
+5. 清除单调用缓存后，才允许下一个调用开始。
 
-- `register` 按 `sourceIndex` 严格递增。
-- 结果可乱序 `settleExecution`。
-- Pi toolResult `message_end` 到达时调用 `observeTranscriptResult`，证明该结果已经进入 Pi transcript。
-- `drainReady` 只输出“执行已完成且 transcript 已观察”的条目，并从下一个预期 sourceIndex 连续输出。
-- step end 前所有 started call 必须有 result；取消时为未执行 call 生成 `TOOL_ABORTED_BEFORE_DISPATCH`。
-- 缓冲大小不能超过当前 assistant 的 tool call 数；超过即 `KERNEL_TOOL_BUFFER_OVERFLOW`。
+若取消发生在后续调用开始前，恢复规则要求时使用既有 DSH `TOOL_ABORTED_BEFORE_DISPATCH` 结果。V1 不存在并行 dispatch、完成重排或 `ToolCommitBuffer`；这些语义保留给 `PARALLEL-110`。
 
 ## 16. Approval 契约
 
@@ -1050,7 +1003,7 @@ AgentHandle dispose 顺序：
 
 ## 24. 契约测试清单
 
-实现者必须建立可复用 contract suite，至少验证：
+实现者必须提供以下聚焦 contract coverage：
 
 1. Kernel event 合法顺序和每类非法顺序。
 2. async sink 的提交屏障。
@@ -1060,7 +1013,7 @@ AgentHandle dispose 顺序：
 6. DSH↔Pi message/stream round trip。
 7. 模型 step freeze 与下 step 切换。
 8. DSH tool pipeline 未被绕过。
-9. 并行工具乱序完成、源顺序提交。
+9. 两个工具按源顺序串行执行与提交，两个 body 不重叠。
 10. approval stale/duplicate。
 11. Client durable/runtime 去重与 seq 缺口重载。
 12. Session append 失败后 Pi 不再启动新工具。
@@ -1069,4 +1022,4 @@ AgentHandle dispose 顺序：
 15. MCP config create 默认 disabled、全记录 CAS、跨来源名称冲突、tool rename acknowledgement 和 committed-but-apply-error 语义。
 16. MCP credential value 不出 Host，credential rotation 只重启引用行，单 server reconcile 不影响兄弟 server。
 
-Mock KernelDriver 必须通过该 suite；PiKernelDriver 必须复用同一 suite。未来其他内核只有通过相同 suite 才能加入默认组合。
+测试文件内的小型 fake KernelDriver 负责覆盖 DSH machine lifecycle 与非法 event order；PiKernelDriver 使用上述聚焦 conversion、tool、recovery 与 integration case。只有提出第二个 production kernel 时，才要求建立可复用 cross-kernel conformance suite。

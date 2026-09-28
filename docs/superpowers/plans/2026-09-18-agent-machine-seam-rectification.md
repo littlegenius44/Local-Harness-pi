@@ -1,5 +1,7 @@
 # Agent Machine Seam Rectification Implementation Plan
 
+> **Status update, 2026-09-27:** PR-A's machine seam is complete. For PR-B, the owner-approved [Minimal Serial Pi Kernel Plan](2026-09-27-local-harness-pi-pr-b-minimal-serial.md) supersedes R2–R5 implementation details: V1 uses low-level `runAgentLoop()`, serial tools, existing DSH durability APIs, and four commits. R1 remains the historical PR-A record.
+
 English | [中文](2026-09-18-agent-machine-seam-rectification.zh.md)
 
 Fences marked `ts design` are planned implementation excerpts checked for syntax only, not available APIs. Their omitted host dependencies must be wired and pass source typechecking and contract tests in the owning implementation task.
@@ -129,7 +131,7 @@ Before continuing PR-A, the other task must:
 
 - [ ] Keep genuinely opaque values as `unknown`: tool arguments before schema validation, abort reasons, sanitized error details, and private Pi metadata. Do not create Local Harness `Message`, `ContentBlock`, or `StreamChunk` types merely to remove `unknown`.
 
-- [ ] Cover Unicode, images, reasoning, parallel tool calls, error tool results, and unknown metadata with fixtures. DSH→Pi→DSH conversion must preserve stable ids, source, content, and finish reason.
+- [ ] Cover Unicode, images, reasoning, two source-ordered serial tool calls, error tool results, and unknown metadata with fixtures. DSH→Pi→DSH conversion must preserve stable ids, source, content, and finish reason.
 
 - [ ] Run and commit.
 
@@ -194,7 +196,7 @@ Before continuing PR-A, the other task must:
 - Test: `packages/core/agent-loop-pi/tests/compaction-through-pi.integration.spec.ts`
 
 - [ ] Mark `M0 Kernel Integration` after PR-B passes. M0 is the go/no-go for starting PR-C, not the public V1 release.
-- [ ] M0 must prove exactly one factory in the default composition; Pi owns only the conversational model-tool loop; DSH Session is conversation/execution recovery truth; recovery never reads a Pi store; and all three flush barriers, out-of-order tool commits, Compaction generations, and the crash matrix pass.
+- [ ] M0 must prove exactly one factory in the default composition; Pi owns only the conversational model-tool loop; DSH Session is conversation/execution recovery truth; recovery never reads a Pi store; and all three flush barriers, non-overlapping source-ordered serial tool commits, Compaction generations, and the focused crash matrix pass.
 - [ ] M0 introduces no Tool Effect Taxonomy, Evidence/Critic store, general agent graph, multi-agent orchestration, or new domain databases. Future domain services may own `Decision`, `Evidence`, and `Artifact`, but references, state changes, and execution results affecting model behavior after recovery must enter DSH Session as stable refs/events.
 - [ ] Attach complete command output, pinned upstream hashes, failure injection points, and known limitations to the Draft PR. If any item fails, do not start PR-C changes that depend on real Pi behavior.
 
@@ -221,8 +223,8 @@ Before continuing PR-A, the other task must:
 ## Schedule impact
 
 - PR-A: Changes from 4–5 days to 5–6 days for the seam, regression tests, and documentation synchronization.
-- PR-B: Changes from 8–11 days to 7–10 days by removing duplicate factory lifecycle implementation and maintenance.
+- PR-B: 3–5 days after additionally removing the duplicate durability service, generic conformance framework, parallel reorder buffer, and stateful Pi Agent wrapper.
 - PR-C: Remains 7–9 days; `main` stabilization remains 3–4 days.
-- Total net work remains 22–29 days. One day of high-risk architecture work moves forward into PR-A, reducing duplicate lifecycle implementation and review in PR-B.
+- Total net work is now 18–24 days. PR-A still owns the high-risk lifecycle seam; the approved serial PR-B reduces implementation and review surface without weakening Session, recovery, approval, or cancellation correctness.
 
 This plan preserves the user-confirmed V1 product scope and corrects only implementation boundaries and check ordering.

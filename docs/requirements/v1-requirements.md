@@ -2,7 +2,7 @@
 
 English | [中文](v1-requirements.zh.md)
 
-Document version: 1.2
+Document version: 1.3
 
 Applicable release: V1
 
@@ -177,7 +177,7 @@ V1's default composition must activate exactly one AgentFactory, `@local-harness
 
 ### FR-021 (P0) Pi dependency boundary
 
-Production runtime may use only Pi Agent Core loops, Agent, events, and tool types. Loading Pi Harness Session, Skills, Compaction, and built-in coding tools is prohibited.
+Production runtime may use only Pi Agent Core's low-level `runAgentLoop()`, events, and tool types. V1 must not construct the stateful Pi `Agent`. Loading Pi Harness Session, Skills, Compaction, and built-in coding tools is prohibited.
 
 ### FR-022 (P0) Context reconstruction
 
@@ -185,7 +185,7 @@ Before each model step, Pi context must be rebuilt from the current DSH Session 
 
 ### FR-023 (P0) Event barriers
 
-Pi `Agent.subscribe()` async listeners must be awaited in order. `agent_end` may transition the DSH Agent to idle only after all DSH Session appends, the end-of-turn `flush()`, and required cleanup complete.
+Kernel event-sink promises must be awaited in order. `agent_end` may transition the DSH Agent to idle only after all DSH Session appends, the end-of-turn `ctx.sessions.flush(session)`, and required cleanup complete.
 
 ### FR-024 (P0) Turn/Step mapping
 
@@ -193,7 +193,11 @@ One Pi run maps to one DSH turn; each Pi `turn_start`/`turn_end` maps to one DSH
 
 ### FR-025 (P1) Future kernel interface
 
-Pi must sit behind `KernelDriver`. DSH Agent/UI/Session must not import Pi event types. V1 `KernelDriver` abstracts only the conversational model-tool loop and does not promise general agent graphs, multi-Agent orchestration, or arbitrary background workflows. V1 requires no second implementation, but should supply a mock driver for contract tests.
+Pi must sit behind `KernelDriver`. DSH Agent/UI/Session must not import Pi event types. V1 `KernelDriver` abstracts only the conversational model-tool loop and does not promise general agent graphs, multi-Agent orchestration, or arbitrary background workflows. V1 requires no second implementation; a small test-local fake driver is sufficient for machine contract tests.
+
+### FR-026 (P0) Serial V1 tool execution
+
+The Pi-backed V1 loop must execute tool calls serially in assistant source order. Its kernel descriptor reports `parallelTools: false`; each Pi proxy reports sequential execution; and `maxParallelToolCalls` does not alter the Pi machine. Parallel dispatch and commit reordering belong to `PARALLEL-110` and are not V1 acceptance requirements.
 
 ## 8. Model configuration and invocation
 
@@ -460,7 +464,7 @@ If the DSH baseline itself fluctuates, attach raw measurements for project-owner
 
 ### NFR-021 (P0) Bounded caches
 
-Pi event reordering, stream deltas, tool output previews, and Session projection buffers must have explicit bounds. Large output should retain DSH truncation or attachment/spill policies.
+Pi event sequencing, stream deltas, the single active serial tool-result cache, tool output previews, and Session projection buffers must have explicit bounds. Large output should retain DSH truncation or attachment/spill policies.
 
 ### NFR-022 (P0) Resource cleanup
 
@@ -500,7 +504,7 @@ Verify at least:
 
 ### TEST-003 (P0) Tool matrix
 
-Cover at least file reading, search, patch, shell, unknown tools, schema errors, approval allow/deny, timeout, cancellation, out-of-order parallel completion, `additionalContexts`, and `concludesTurn`.
+Cover at least file reading, search, patch, shell, unknown tools, schema errors, approval allow/deny, timeout, cancellation, two tool calls executing and committing serially in assistant source order, `additionalContexts`, and `concludesTurn`. Assert that the Pi kernel never overlaps two tool bodies.
 
 ### TEST-004 (P0) Session recovery matrix
 
@@ -591,6 +595,7 @@ V1.1 candidate requirements are fixed:
 - BROWSER-110: Playwright browser automation with an independent permission domain.
 - UPDATE-110: Signed automatic updates, installation rollback, and release-key workflow.
 - SECURITY-110: Plugin signatures, fine-grained capability grants, network isolation, and audit export.
+- PARALLEL-110: Argument-aware parallel Pi tool scheduling, bounded out-of-order completion buffering, source-order durable commits, and its crash/recovery matrix.
 
 Before V1 release, retain only extension interfaces for these requirements; do not implement them early.
 
@@ -599,7 +604,7 @@ Before V1 release, retain only extension interfaces for these requirements; do n
 | Requirement scope | Primary PR |
 |---|---|
 | PLAT, FR-001–004, baseline NFR-010–014 | PR-A |
-| FR-010–019、FR-020–025、FR-030–037、FR-040–047、NFR-001–006、TEST-001–004、AC-010 | PR-B |
+| FR-010–019、FR-020–026、FR-030–037、FR-040–047、NFR-001–006、TEST-001–004、AC-010 | PR-B |
 | FR-050–052、FR-060–067、FR-070–074、FR-080–083、FR-090–092、NFR-020–032、TEST-005–006、AC-001–009 | PR-C |
 
 PR-C must follow passing PR-B recovery and contract tests; the UI must not permanently bypass the real Pi/DSH bridge through mocks.

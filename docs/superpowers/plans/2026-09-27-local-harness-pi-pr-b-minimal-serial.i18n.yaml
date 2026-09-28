@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/superpowers/plans/2026-09-27-local-harness-pi-pr-b-minimal-serial.md
+2026-09-27-local-harness-pi-pr-b-minimal-serial.md: e2ef35eeb913d8926cd7238455ab2bf0e5cb0450
+2026-09-27-local-harness-pi-pr-b-minimal-serial.zh.md: 6d7ff4f9aab98cd87b2c43d951d33116e4f0a024

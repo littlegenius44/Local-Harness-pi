@@ -17,7 +17,7 @@
 本主计划只负责顺序、门禁和 PR 交付。具体代码步骤在三个子计划中：
 
 1. [PR-A：DSH 基线、产品边界与 machine seam](2026-09-10-local-harness-pi-pr-a-dsh-baseline.zh.md)
-2. [PR-B：Pi 内核桥接](2026-09-10-local-harness-pi-pr-b-pi-kernel.zh.md)
+2. [PR-B：最简串行 Pi 内核桥接](2026-09-27-local-harness-pi-pr-b-minimal-serial.zh.md)
 3. [PR-C：V1 产品闭环](2026-09-10-local-harness-pi-pr-c-product-loop.zh.md)
 
 依赖顺序固定为 `PR-A -> PR-B -> PR-C`。本次架构修正按 [Agent Machine Seam Rectification Plan](2026-09-18-agent-machine-seam-rectification.zh.md) 纳入未完成的 PR-A/PR-B，不另开 A.5：machine seam 属于 PR-A，typed Kernel contract 和 `PiAgentLoop` 子类属于 PR-B。方案 2 的 About/许可属于 PR-A，Compaction/会话内核回归属于 PR-B，GUI-managed MCP 与完整产品回归属于 PR-C，不另开第四条长期分支。只有 PR-B 单个 diff 超过约 2,500 行手写业务代码或连续两轮复审仍无法收敛时，才允许按子计划规定拆为 B1/B2；不得把 MCP 或 UI 与 PR-B 平行开发后再猜测接口。
@@ -28,10 +28,10 @@
 |---|---|---|
 | `PLAT-001`–`PLAT-003` | A1–A7、C8、C9 | Windows unsigned NSIS、版本锁、来源与许可证门禁、默认 AgentLoop 回归 |
 | `FR-001`–`FR-004` | A3–A5、C9 | workspace/单实例/窗口安全、About/离线许可与 Windows smoke |
-| `FR-010`–`FR-019` | B3、B4、B8–B10、C7、C9 | Agent 生命周期、消息确认、恢复、Compaction、会话整理/分叉/搜索/导出矩阵 |
-| `FR-020`–`FR-025` | B1–B9 | dependency boundary、KernelDriver conformance、唯一 AgentFactory |
-| `FR-030`–`FR-037` | B4、C1、C9 | 本地/云端 Responses 与 Completions、首次启动及发现回退矩阵 |
-| `FR-040`–`FR-047` | B5、B6、B10、C6、C7 | 工具、审批、workspace、失败、上下文、Diff/Terminal 与工具卡测试 |
+| `FR-010`–`FR-019` | PR-B 提交 1–4、C7、C9 | Agent 生命周期、消息确认、恢复、Compaction、会话整理/分叉/搜索/导出矩阵 |
+| `FR-020`–`FR-026` | PR-B 提交 1–4 | dependency boundary、窄 KernelDriver、串行工具、唯一 AgentFactory |
+| `FR-030`–`FR-037` | PR-B 提交 1 和 4、C1、C9 | 本地/云端 Responses 与 Completions、首次启动及发现回退矩阵 |
+| `FR-040`–`FR-047` | PR-B 提交 3 和 4、C6、C7 | 串行工具、审批、workspace、失败、上下文、Diff/Terminal 与工具卡测试 |
 | `FR-050`–`FR-052` | C5、C7、C9 | `/goal`、`/plan`、Plus 菜单与恢复测试 |
 | `FR-060`–`FR-067` | C2–C5、C7、C9 | Skill、MCP CRUD/CAS/凭据、插件清单、有效权限与失败隔离测试 |
 | `FR-070`–`FR-072` | C5、C7、C9 | 附件、PDF 预览、Web tools 产品流 |
@@ -41,7 +41,7 @@
 | `FR-092` | V1.1 | V1 越界扫描和 known-limitations 记录 |
 | `NFR-001`–`NFR-006` | B3–B10、C6、C7、C9 | Session ordering、三类 flush、Compaction、crash/SQLite 重建矩阵 |
 | `NFR-010`–`NFR-014` | A5、B4、B5、C1–C4、C8、C9 | credential/network/Electron/MCP/plugin/log redaction 矩阵 |
-| `NFR-020`–`NFR-022` | B7–B10、C3、C4、C9 | 基线对比、缓存上界、MCP reconcile、取消与资源回收测试 |
+| `NFR-020`–`NFR-022` | PR-B 提交 2–4、C3、C4、C9 | 基线对比、缓存上界、MCP reconcile、取消与资源回收测试 |
 | `NFR-030`–`NFR-032` | C4–C7、C9 | 键盘、错误操作建议和状态可理解性测试 |
 | `TEST-001`–`TEST-006` | A2、A3、B1、B10、C1、C3、C7、C9 | source/dependency、model、tool、recovery、product、安全矩阵 |
 | `AC-001`–`AC-010` | B10、C1、C3、C5、C7、C9 | 本地/云模型、恢复、共存、UI 去重、首次启动、会话库、MCP 与长会话端到端证据 |
@@ -137,7 +137,7 @@
 
 完成 PR-B 后，默认组合恰好注册一个 `AgentFactory`：`PiAgentLoop` 继承 DSH `AgentLoop` lifecycle，只通过 machine seam 由 Pi Agent Core 驱动 conversational tool-loop；模型、工具和所有 durable event 仍走 DSH 服务。恢复只读 DSH Session，工具副作用前和 turn 完成前都有 flush barrier。M0 是 PR-C 的正式 go/no-go，不是对外发布版本。
 
-阻断条件：生产依赖含 Pi Harness Session/Skills/Compaction、Pi 复制或重新实现 AgentFactory lifecycle、base 激活第二个 factory、Pi 直接执行工具或读模型 key、UI 读取 Pi event、存在第二份 transcript、并行工具按完成顺序写 Session、flush 失败仍返回成功。M0 不接纳 Tool Effect Taxonomy、Evidence/Critic store、通用 agent graph 或多 Agent 编排。
+阻断条件：生产依赖含 Pi Harness Session/Skills/Compaction 或有状态 Pi `Agent`、Pi 复制或重新实现 AgentFactory lifecycle、base 激活第二个 factory、Pi 绕过 DSH 工具或读取模型 key、UI 读取 Pi event、存在第二份 transcript、Pi 在 V1 重叠执行两个工具 body、flush 失败仍返回成功。M0 不接纳 Pi 并行工具、Tool Effect Taxonomy、Evidence/Critic store、通用 agent graph 或多 Agent 编排。
 
 ### 检查点 C：V1 可交付
 
@@ -223,20 +223,19 @@
 ### 6.2 分段净工作量
 
 - PR-A：5–6 个工作日，约 0.7–1.0 个完整周额度。内容为源码导入、来源锁、完整产品/Web/模型身份、About/许可、数据隔离、Electron 安全和行为中性的 Agent machine seam。
-- PR-B：7–10 个工作日，约 1.2–1.8 个完整周额度。内容为 typed conversational KernelDriver、模型/工具桥、durability、继承式 Pi machine、恢复和 DSH Compaction 兼容；这是关键路径。
+- PR-B：3–5 个工作日，约 0.5–0.9 个完整周额度。内容为窄 conversational KernelDriver、串行模型/工具桥、复用 DSH durability、继承式 Pi machine、恢复和 DSH Compaction 兼容；这仍是关键路径。
 - PR-C：7–9 个工作日，约 1.0–1.4 个完整周额度。内容为共享 guarded-fetch、OpenAI route/onboarding、GUI-managed MCP、设置/Plus 菜单、会话/Diff/Terminal 回归、更新和 Desktop E2E。
 - `main` 稳定化与发布：3–4 个工作日，约 0.3–0.5 个完整周额度。只修复已发现缺陷、重跑矩阵和制作 release evidence，不增加功能。
 
-总计为 22–29 个净工作日、约 3.2–4.7 个完整周额度。常规基准取 25 个工作日、约 5 个日历周和 3.9 个完整周额度；乐观也按 5 周安排，保守预留第 6 周。
+总计为 18–24 个净工作日、约 2.5–3.8 个完整周额度。常规基准取 21 个工作日、约 4–5 个日历周和 3.2 个完整周额度；保守第 5 周用于稳定化。
 
 ### 6.3 建议周历
 
-- 第 1 周：完成 PR-A。第 5–6 个工作日形成检查点 A；若提前全绿，剩余额度只用于 B1–B2 的源码复读和失败测试，不抢跑 UI。
-- 第 2 周：完成 B3–B6，即消息/context、模型、工具和 Session commit bridge。
-- 第 3 周：完成 B7–B10、crash/compaction matrix 和 M0。PR-B/M0 未通过前不得开始依赖真实 Pi 语义的 PR-C 代码。
-- 第 4 周：完成 C1–C4，即共享 guarded-fetch、模型 onboarding、能力 inventory、Host MCP 和 MCP/UI settings。
-- 第 5 周：完成 C5–C9、检查点 C，并在 `main` 运行第一次全量门禁。
-- 第 6 周（保守余量）：只处理跨包类型生成、Windows 打包、MCP 进程清理、性能门禁或独立复审发现的问题；没有缺陷时不消耗该周。
+- 第 1 周：完成 PR-A。第 5–6 个工作日形成检查点 A；若提前全绿，剩余额度只用于 PR-B 源码复读和提交 1 的失败测试，不抢跑 UI。
+- 第 2 周：完成 PR-B 提交 1–4、聚焦 crash/compaction matrix 和 M0。PR-B/M0 未通过前不得开始依赖真实 Pi 语义的 PR-C 代码。
+- 第 3 周：完成 C1–C4，即共享 guarded-fetch、模型 onboarding、能力 inventory、Host MCP 和 MCP/UI settings。
+- 第 4 周：完成 C5–C9、检查点 C，并在 `main` 运行第一次全量门禁。
+- 第 5 周（保守余量）：只处理跨包类型生成、Windows 打包、MCP 进程清理、性能门禁或独立复审发现的问题；没有缺陷时不消耗该周。
 
 ### 6.4 额度与延期规则
 

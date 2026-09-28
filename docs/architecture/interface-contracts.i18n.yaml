@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/architecture/interface-contracts.md
-interface-contracts.md: d8ea573f53e36312ef62faf10e0fee62e5f67cf1
-interface-contracts.zh.md: af74ebb0a4b3384a9ad5b4004e55365d50575eb9
+interface-contracts.md: f19e5e8fe111cd8463fa0597b8e85013b7651c2e
+interface-contracts.zh.md: 03b9540e683c82bcf25420d9fd0da095b1159c72
